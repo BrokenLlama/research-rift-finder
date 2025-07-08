@@ -1,318 +1,319 @@
 
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send, RotateCcw, FileText, Bot, User } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { useToast } from '@/hooks/use-toast';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import Navigation from '@/components/Navigation';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Send, Bot, User } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
-interface ChatMessage {
+interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  timestamp: string;
+  created_at: string;
 }
 
-interface SavedPaper {
+interface Paper {
   id: string;
   title: string;
-  authors: Array<{ display_name: string }>;
-  publication_year: number;
-  journal?: string;
-  abstract?: string;
-  summary?: {
-    objective: string;
-    methodology: string;
-    findings: string;
-    limitations: string;
-  };
+  authors: string[];
+  abstract: string | null;
+  publication_year: number | null;
+  journal: string | null;
+  summary: any;
 }
 
 const ResearchChat = () => {
-  const [chatPapers, setChatPapers] = useState<SavedPaper[]>([]);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [inputMessage, setInputMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { user } = useAuth();
   const { toast } = useToast();
+  
+  const listId = searchParams.get('listId');
+  const listName = searchParams.get('listName');
+  
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [papers, setPapers] = useState<Paper[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   useEffect(() => {
-    const storedPapers = localStorage.getItem('scholarmate_chat_papers');
-    if (storedPapers) {
-      setChatPapers(JSON.parse(storedPapers));
-    } else {
-      navigate('/saved-papers');
+    if (user && listId) {
+      initializeChat();
     }
+  }, [user, listId]);
 
-    const storedMessages = localStorage.getItem('scholarmate_chat_history');
-    if (storedMessages) {
-      setMessages(JSON.parse(storedMessages));
-    }
-  }, [navigate]);
+  const initializeChat = async () => {
+    try {
+      // Fetch papers from the selected list
+      const { data: papersData, error: papersError } = await supabase
+        .from('papers')
+        .select('*')
+        .eq('list_id', listId);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  const saveMessageToHistory = (newMessages: ChatMessage[]) => {
-    setMessages(newMessages);
-    localStorage.setItem('scholarmate_chat_history', JSON.stringify(newMessages));
-  };
-
-  const generateAIResponse = async (userQuestion: string): Promise<string> => {
-    // Create context from papers
-    const papersContext = chatPapers.map(paper => {
-      let context = `Paper: "${paper.title}" by ${paper.authors.map(a => a.display_name).join(', ')} (${paper.publication_year})\n`;
-      
-      if (paper.abstract) {
-        context += `Abstract: ${paper.abstract}\n`;
+      if (papersError) {
+        toast({
+          title: "Error",
+          description: "Failed to load papers for chat.",
+          variant: "destructive",
+        });
+        return;
       }
-      
-      if (paper.summary) {
-        context += `Summary:\n`;
-        context += `- Objective: ${paper.summary.objective}\n`;
-        context += `- Methodology: ${paper.summary.methodology}\n`;
-        context += `- Findings: ${paper.summary.findings}\n`;
-        context += `- Limitations: ${paper.summary.limitations}\n`;
+
+      setPapers(papersData || []);
+
+      // Create or get existing chat session
+      const { data: existingSession, error: sessionError } = await supabase
+        .from('chat_sessions')
+        .select('id')
+        .eq('user_id', user?.id)
+        .eq('list_id', listId)
+        .single();
+
+      let currentSessionId;
+
+      if (existingSession) {
+        currentSessionId = existingSession.id;
+      } else {
+        const { data: newSession, error: createError } = await supabase
+          .from('chat_sessions')
+          .insert({
+            user_id: user?.id,
+            list_id: listId,
+            name: `Chat with ${listName || 'Papers'}`,
+          })
+          .select('id')
+          .single();
+
+        if (createError) {
+          toast({
+            title: "Error",
+            description: "Failed to create chat session.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        currentSessionId = newSession.id;
       }
-      
-      return context;
-    }).join('\n---\n');
 
-    const systemMessage = "You are an academic research assistant. You can only use the abstracts and summaries of the saved papers to answer the user's questions. If the answer is not in the papers, say 'I don't have enough information from the papers you saved.'";
-    
-    const prompt = `${systemMessage}\n\nPapers Context:\n${papersContext}\n\nUser Question: ${userQuestion}\n\nPlease provide a helpful response based only on the information from these papers.`;
+      setSessionId(currentSessionId);
 
-    // For demo purposes, we'll simulate an AI response
-    // In a real implementation, you would call an LLM API like OpenRouter or Hugging Face
-    return simulateAIResponse(userQuestion, papersContext);
+      // Load existing messages
+      const { data: messagesData, error: messagesError } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('session_id', currentSessionId)
+        .order('created_at', { ascending: true });
+
+      if (messagesError) {
+        console.error('Error loading messages:', messagesError);
+      } else {
+        setMessages(messagesData || []);
+      }
+
+    } catch (error) {
+      console.error('Error initializing chat:', error);
+    }
   };
 
-  const simulateAIResponse = async (question: string, context: string): Promise<string> => {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Simple keyword-based responses for demo
-    const lowerQuestion = question.toLowerCase();
-    
-    if (lowerQuestion.includes('methodology') || lowerQuestion.includes('method')) {
-      return "Based on the papers you've saved, the methodologies mentioned include systematic research approaches and evidence-based evaluation techniques. However, for more specific methodological details, I would need more comprehensive information from the full papers.";
-    }
-    
-    if (lowerQuestion.includes('finding') || lowerQuestion.includes('result')) {
-      return "The papers you've saved mention significant insights and measurable outcomes that contribute to their respective fields. The key findings reveal important discoveries that provide new perspectives for future research and practical applications.";
-    }
-    
-    if (lowerQuestion.includes('limitation')) {
-      return "The papers acknowledge certain constraints and suggest areas for future research. They identify opportunities for extended investigation and broader scope in future studies.";
-    }
-    
-    if (lowerQuestion.includes('objective') || lowerQuestion.includes('goal')) {
-      return "The research objectives in your saved papers focus on advancing knowledge in their respective domains through comprehensive analysis and evidence-based findings. They aim to investigate and analyze key aspects of their subject matter.";
-    }
-    
-    return "I don't have enough information from the papers you saved to provide a specific answer to your question. Could you try asking about the methodology, findings, objectives, or limitations mentioned in the papers?";
-  };
+  const sendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !sessionId || isLoading) return;
 
-  const handleSendMessage = async () => {
-    if (!inputMessage.trim()) return;
-
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: inputMessage,
-      timestamp: new Date().toISOString()
-    };
-
-    const newMessages = [...messages, userMessage];
-    saveMessageToHistory(newMessages);
-    setInputMessage('');
+    const userMessage = newMessage.trim();
+    setNewMessage('');
     setIsLoading(true);
 
     try {
-      const aiResponse = await generateAIResponse(inputMessage);
-      
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: aiResponse,
-        timestamp: new Date().toISOString()
-      };
+      // Save user message
+      const { data: savedMessage, error: saveError } = await supabase
+        .from('chat_messages')
+        .insert({
+          session_id: sessionId,
+          role: 'user',
+          content: userMessage,
+        })
+        .select()
+        .single();
 
-      saveMessageToHistory([...newMessages, assistantMessage]);
+      if (saveError) {
+        throw saveError;
+      }
+
+      // Add user message to UI immediately
+      setMessages(prev => [...prev, savedMessage]);
+
+      // Prepare messages for API
+      const chatMessages = [...messages, savedMessage].map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+
+      // Call our edge function for chat completion
+      const response = await supabase.functions.invoke('chat-completion', {
+        body: {
+          messages: chatMessages,
+          papers: papers,
+        },
+      });
+
+      if (response.error) {
+        throw response.error;
+      }
+
+      const { message: assistantResponse } = response.data;
+
+      // Save assistant message
+      const { data: assistantMessage, error: assistantError } = await supabase
+        .from('chat_messages')
+        .insert({
+          session_id: sessionId,
+          role: 'assistant',
+          content: assistantResponse,
+        })
+        .select()
+        .single();
+
+      if (assistantError) {
+        throw assistantError;
+      }
+
+      // Add assistant message to UI
+      setMessages(prev => [...prev, assistantMessage]);
+
     } catch (error) {
-      console.error('Error generating AI response:', error);
+      console.error('Error sending message:', error);
       toast({
         title: "Error",
-        description: "Failed to generate response. Please try again.",
-        variant: "destructive"
+        description: "Failed to send message. Please try again.",
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleClearChat = () => {
-    setMessages([]);
-    localStorage.removeItem('scholarmate_chat_history');
-    toast({
-      title: "Chat cleared",
-      description: "All messages have been removed.",
-    });
-  };
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navigation />
+        <div className="container mx-auto px-4 py-8 text-center">
+          <p>Please sign in to use the research chat.</p>
+        </div>
+      </div>
+    );
+  }
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
-      <Navigation />
-      
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center">
-              <Button
-                variant="ghost"
-                onClick={() => navigate('/saved-papers')}
-                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 mr-4"
-              >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Saved Papers
-              </Button>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">Research Chat</h1>
-                <p className="text-gray-600">
-                  Ask questions about your {chatPapers.length} selected paper{chatPapers.length !== 1 ? 's' : ''}
-                </p>
-              </div>
-            </div>
-            
-            <Button
-              variant="outline"
-              onClick={handleClearChat}
-              disabled={messages.length === 0}
-            >
-              <RotateCcw className="h-4 w-4 mr-2" />
-              Clear Chat
-            </Button>
-          </div>
-
-          {/* Selected Papers Info */}
-          <Card className="mb-6 border-0 bg-white/90 backdrop-blur-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center text-lg">
-                <FileText className="h-5 w-5 mr-2 text-indigo-600" />
-                Selected Papers
-              </CardTitle>
+  if (!listId) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navigation />
+        <div className="container mx-auto px-4 py-8">
+          <Card>
+            <CardHeader>
+              <CardTitle>Research Chat</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                {chatPapers.map((paper, index) => (
-                  <div key={paper.id} className="text-sm">
-                    <span className="font-medium">{index + 1}.</span> {paper.title}
-                    <span className="text-gray-500 ml-2">({paper.publication_year})</span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Chat Messages */}
-          <Card className="mb-4 border-0 bg-white/90 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="h-96 overflow-y-auto space-y-4 mb-4">
-                {messages.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <Bot className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                    <p>Start a conversation by asking questions about your saved papers!</p>
-                    <p className="text-sm mt-2">
-                      Try asking about methodology, findings, objectives, or limitations.
-                    </p>
-                  </div>
-                ) : (
-                  messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`flex items-start gap-3 ${
-                        message.role === 'user' ? 'justify-end' : 'justify-start'
-                      }`}
-                    >
-                      {message.role === 'assistant' && (
-                        <div className="bg-indigo-100 p-2 rounded-full">
-                          <Bot className="h-4 w-4 text-indigo-600" />
-                        </div>
-                      )}
-                      
-                      <div
-                        className={`max-w-[80%] p-3 rounded-lg ${
-                          message.role === 'user'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-100 text-gray-900'
-                        }`}
-                      >
-                        <p className="text-sm">{message.content}</p>
-                        <p className="text-xs mt-1 opacity-70">
-                          {new Date(message.timestamp).toLocaleTimeString()}
-                        </p>
-                      </div>
-                      
-                      {message.role === 'user' && (
-                        <div className="bg-blue-100 p-2 rounded-full">
-                          <User className="h-4 w-4 text-blue-600" />
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-                
-                {isLoading && (
-                  <div className="flex items-start gap-3">
-                    <div className="bg-indigo-100 p-2 rounded-full">
-                      <Bot className="h-4 w-4 text-indigo-600" />
-                    </div>
-                    <div className="bg-gray-100 p-3 rounded-lg">
-                      <div className="flex items-center space-x-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
-                        <span className="text-sm text-gray-600">Thinking...</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* Message Input */}
-              <div className="flex items-center gap-2">
-                <Input
-                  type="text"
-                  placeholder="Ask a question about your saved papers..."
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  disabled={isLoading}
-                  className="flex-1"
-                />
-                <Button
-                  onClick={handleSendMessage}
-                  disabled={isLoading || !inputMessage.trim()}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white"
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
-              </div>
+              <p className="text-gray-600 mb-4">
+                Select a paper list to start chatting with your research papers.
+              </p>
+              <p className="text-sm text-gray-500">
+                Go to "My Lists" and click "Chat" on any list to start a conversation.
+              </p>
             </CardContent>
           </Card>
         </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Navigation />
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <Card className="h-[600px] flex flex-col">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Bot className="h-5 w-5 mr-2 text-blue-600" />
+              Chat with {listName || 'Your Papers'} ({papers.length} papers)
+            </CardTitle>
+          </CardHeader>
+          
+          <CardContent className="flex-1 flex flex-col">
+            <ScrollArea className="flex-1 pr-4 mb-4">
+              <div className="space-y-4">
+                {messages.length === 0 && (
+                  <div className="text-center text-gray-500 py-8">
+                    <Bot className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                    <p>Ask me anything about your selected papers!</p>
+                    <p className="text-sm mt-2">
+                      I can help analyze, summarize, and answer questions based on the {papers.length} papers in this list.
+                    </p>
+                  </div>
+                )}
+                
+                {messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                        message.role === 'user'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-900'
+                      }`}
+                    >
+                      <div className="flex items-start space-x-2">
+                        {message.role === 'assistant' && (
+                          <Bot className="h-4 w-4 mt-1 flex-shrink-0" />
+                        )}
+                        {message.role === 'user' && (
+                          <User className="h-4 w-4 mt-1 flex-shrink-0" />
+                        )}
+                        <div className="whitespace-pre-wrap">{message.content}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                
+                {isLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-gray-100 rounded-lg px-4 py-2">
+                      <div className="flex items-center space-x-2">
+                        <Bot className="h-4 w-4" />
+                        <div className="flex space-x-1">
+                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
+                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse delay-75"></div>
+                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse delay-150"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+            
+            <form onSubmit={sendMessage} className="flex space-x-2">
+              <Input
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                placeholder="Ask a question about your papers..."
+                disabled={isLoading}
+                className="flex-1"
+              />
+              <Button type="submit" disabled={isLoading || !newMessage.trim()}>
+                <Send className="h-4 w-4" />
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
