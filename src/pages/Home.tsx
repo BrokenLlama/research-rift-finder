@@ -1,11 +1,11 @@
-
 import React, { useState } from 'react';
-import { Search, BookOpen, Users, Calendar, FileText } from 'lucide-react';
+import { Search, BookOpen, Users, Calendar, FileText, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
+import Navigation from '@/components/Navigation';
 
 interface Paper {
   id: string;
@@ -20,8 +20,17 @@ const Home = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [papers, setPapers] = useState<Paper[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [savedPapers, setSavedPapers] = useState<string[]>([]);
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  React.useEffect(() => {
+    const stored = localStorage.getItem('scholarmate_saved_papers');
+    if (stored) {
+      const savedPapersData = JSON.parse(stored);
+      setSavedPapers(savedPapersData.map((paper: any) => paper.id));
+    }
+  }, []);
 
   const searchPapers = async () => {
     if (!searchTerm.trim()) {
@@ -91,6 +100,33 @@ const Home = () => {
     return words.filter(Boolean).join(' ');
   };
 
+  const handleSavePaper = (paper: Paper) => {
+    const stored = localStorage.getItem('scholarmate_saved_papers');
+    const existingSaved = stored ? JSON.parse(stored) : [];
+    
+    if (existingSaved.some((saved: any) => saved.id === paper.id)) {
+      toast({
+        title: "Already saved",
+        description: "This paper is already in your saved list.",
+      });
+      return;
+    }
+
+    const paperToSave = {
+      ...paper,
+      savedAt: new Date().toISOString()
+    };
+
+    const updatedSaved = [...existingSaved, paperToSave];
+    localStorage.setItem('scholarmate_saved_papers', JSON.stringify(updatedSaved));
+    setSavedPapers([...savedPapers, paper.id]);
+    
+    toast({
+      title: "Paper saved",
+      description: "Added to your saved papers collection.",
+    });
+  };
+
   const handleSummarizePaper = (paper: Paper) => {
     navigate('/summarize', { state: { paper } });
   };
@@ -103,6 +139,8 @@ const Home = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+      <Navigation />
+      
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="text-center mb-12">
@@ -194,7 +232,17 @@ const Home = () => {
                         </div>
                       </div>
                       
-                      <div className="lg:ml-6">
+                      <div className="lg:ml-6 flex flex-col gap-2">
+                        <Button
+                          onClick={() => handleSavePaper(paper)}
+                          disabled={savedPapers.includes(paper.id)}
+                          variant="outline"
+                          className="w-full lg:w-auto"
+                        >
+                          <Heart className={`h-4 w-4 mr-2 ${savedPapers.includes(paper.id) ? 'fill-red-500 text-red-500' : ''}`} />
+                          {savedPapers.includes(paper.id) ? 'Saved' : 'Save Paper'}
+                        </Button>
+                        
                         <Button
                           onClick={() => handleSummarizePaper(paper)}
                           className="w-full lg:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-6 py-2 transition-colors"

@@ -1,10 +1,10 @@
-
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, BookOpen, Sparkles, Target, Beaker, TrendingUp, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, BookOpen, Sparkles, Target, Beaker, TrendingUp, AlertTriangle, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import Navigation from '@/components/Navigation';
 
 interface Paper {
   id: string;
@@ -29,15 +29,54 @@ const Summarize = () => {
   const [paper, setPaper] = useState<Paper | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
 
   useEffect(() => {
     if (location.state?.paper) {
       setPaper(location.state.paper);
+      checkIfSaved(location.state.paper.id);
     } else {
-      // Redirect back to home if no paper data
       navigate('/');
     }
   }, [location.state, navigate]);
+
+  const checkIfSaved = (paperId: string) => {
+    const stored = localStorage.getItem('scholarmate_saved_papers');
+    if (stored) {
+      const savedPapers = JSON.parse(stored);
+      setIsSaved(savedPapers.some((saved: any) => saved.id === paperId));
+    }
+  };
+
+  const handleSavePaper = () => {
+    if (!paper) return;
+    
+    const stored = localStorage.getItem('scholarmate_saved_papers');
+    const existingSaved = stored ? JSON.parse(stored) : [];
+    
+    if (existingSaved.some((saved: any) => saved.id === paper.id)) {
+      toast({
+        title: "Already saved",
+        description: "This paper is already in your saved list.",
+      });
+      return;
+    }
+
+    const paperToSave = {
+      ...paper,
+      summary: summary,
+      savedAt: new Date().toISOString()
+    };
+
+    const updatedSaved = [...existingSaved, paperToSave];
+    localStorage.setItem('scholarmate_saved_papers', JSON.stringify(updatedSaved));
+    setIsSaved(true);
+    
+    toast({
+      title: "Paper saved",
+      description: "Added to your saved papers collection with summary.",
+    });
+  };
 
   const summarizeAbstract = async () => {
     if (!paper?.abstract) {
@@ -51,8 +90,6 @@ const Summarize = () => {
 
     setIsLoading(true);
     try {
-      // Simulate AI summarization - In a real app, you'd call your AI service
-      // For now, we'll create a mock summary based on the abstract
       const mockSummary = await generateMockSummary(paper.abstract);
       setSummary(mockSummary);
       
@@ -73,10 +110,8 @@ const Summarize = () => {
   };
 
   const generateMockSummary = async (abstract: string): Promise<Summary> => {
-    // Simulate AI processing delay
     await new Promise(resolve => setTimeout(resolve, 2000));
     
-    // This is a mock implementation. In a real app, you'd call an AI API
     const words = abstract.toLowerCase();
     
     return {
@@ -111,6 +146,8 @@ const Summarize = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+      <Navigation />
+      
       <div className="container mx-auto px-4 py-8">
         {/* Navigation */}
         <Button
@@ -126,9 +163,20 @@ const Summarize = () => {
         <div className="max-w-4xl mx-auto">
           <Card className="shadow-lg border-0 bg-white/90 backdrop-blur-sm mb-8">
             <CardHeader className="pb-4">
-              <CardTitle className="text-2xl md:text-3xl font-bold text-gray-900 leading-tight">
-                {paper.title}
-              </CardTitle>
+              <div className="flex items-start justify-between">
+                <CardTitle className="text-2xl md:text-3xl font-bold text-gray-900 leading-tight flex-1">
+                  {paper.title}
+                </CardTitle>
+                <Button
+                  onClick={handleSavePaper}
+                  disabled={isSaved}
+                  variant="outline"
+                  className="ml-4"
+                >
+                  <Heart className={`h-4 w-4 mr-2 ${isSaved ? 'fill-red-500 text-red-500' : ''}`} />
+                  {isSaved ? 'Saved' : 'Save Paper'}
+                </Button>
+              </div>
               <div className="flex flex-wrap gap-4 text-sm text-gray-600 mt-4">
                 <span>
                   <strong>Authors:</strong> {paper.authors.map(author => author.display_name).join(', ')}
