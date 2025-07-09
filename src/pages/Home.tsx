@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Search, BookOpen, Users, Calendar, FileText, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -104,11 +105,13 @@ const Home = () => {
     }));
   };
 
-  const updateStringFilter = (key: 'author' | 'fieldOfStudy', value: string) => {
-    setFilters(prev => ({
-      ...prev,
-      [key]: value.trim() || undefined
-    }));
+  const updateStringFilter = (key: string, value: string) => {
+    if (key === 'author' || key === 'fieldOfStudy') {
+      setFilters(prev => ({
+        ...prev,
+        [key]: value.trim() || undefined
+      }));
+    }
   };
 
   return (
@@ -187,33 +190,37 @@ const Home = () => {
                     onClick={() => setShowFilters(!showFilters)}
                   >
                     <Filter className="h-4 w-4 mr-2" />
-                    Filters
+                    Advanced Filters
                   </Button>
                 </div>
 
-                {/* Advanced Filters */}
+                {/* Enhanced Advanced Filters */}
                 {showFilters && (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Year Range
+                        Publication Year From
                       </label>
-                      <div className="flex gap-2">
-                        <Input
-                          type="number"
-                          placeholder="From"
-                          value={filters.yearRange?.from?.toString() || ''}
-                          onChange={(e) => updateYearRangeFilter('from', e.target.value)}
-                          className="h-9"
-                        />
-                        <Input
-                          type="number"
-                          placeholder="To"
-                          value={filters.yearRange?.to?.toString() || ''}
-                          onChange={(e) => updateYearRangeFilter('to', e.target.value)}
-                          className="h-9"
-                        />
-                      </div>
+                      <Input
+                        type="number"
+                        placeholder="e.g., 2020"
+                        value={filters.yearRange?.from?.toString() || ''}
+                        onChange={(e) => updateYearRangeFilter('from', e.target.value)}
+                        className="h-9"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Publication Year To
+                      </label>
+                      <Input
+                        type="number"
+                        placeholder="e.g., 2024"
+                        value={filters.yearRange?.to?.toString() || ''}
+                        onChange={(e) => updateYearRangeFilter('to', e.target.value)}
+                        className="h-9"
+                      />
                     </div>
                     
                     <div>
@@ -261,7 +268,7 @@ const Home = () => {
                   <CardContent className="p-6">
                     <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                       <div className="flex-1">
-                        <h3 className="text-xl font-semibold text-gray-900 mb-3 leading-tight">
+                        <h3 className="text-xl font-semibold text-gray-900 mb-3 leading-tight cursor-pointer hover:text-blue-600 transition-colors">
                           {paper.title}
                         </h3>
                         
@@ -296,6 +303,13 @@ const Home = () => {
                       </div>
                       
                       <div className="lg:ml-6 flex flex-col gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full"
+                        >
+                          View Details
+                        </Button>
                         <AddToListButton 
                           paper={{
                             title: paper.title,

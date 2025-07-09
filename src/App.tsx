@@ -9,6 +9,7 @@ import Summarize from "./pages/Summarize";
 import ResearchChat from "./pages/ResearchChat";
 import MyLists from "./pages/MyLists";
 import ListDetails from "./pages/ListDetails";
+import PaperDetails from "./pages/PaperDetails";
 import AuthForm from "./components/AuthForm";
 import NotFound from "./pages/NotFound";
 
@@ -27,6 +28,7 @@ const App = () => (
           <Route path="/research-chat" element={<ResearchChat />} />
           <Route path="/my-lists" element={<MyLists />} />
           <Route path="/list/:listId" element={<ListDetails />} />
+          <Route path="/paper/:source/:paperId" element={<PaperDetails />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
