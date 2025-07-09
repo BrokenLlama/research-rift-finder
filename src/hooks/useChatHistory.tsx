@@ -46,7 +46,18 @@ export const useChatHistory = (listId?: string) => {
       const { data, error } = await query;
 
       if (error) throw error;
-      setChatHistory(data || []);
+      
+      // Transform the data to match our interface
+      const transformedData: ChatHistoryEntry[] = (data || []).map(item => ({
+        id: item.id,
+        list_id: item.list_id,
+        title: item.title,
+        messages: Array.isArray(item.messages) ? item.messages as ChatMessage[] : [],
+        created_at: item.created_at,
+        updated_at: item.updated_at,
+      }));
+      
+      setChatHistory(transformedData);
     } catch (error) {
       console.error('Error fetching chat history:', error);
     } finally {
@@ -71,7 +82,15 @@ export const useChatHistory = (listId?: string) => {
 
       if (error) throw error;
       
-      const newChat = data as ChatHistoryEntry;
+      const newChat: ChatHistoryEntry = {
+        id: data.id,
+        list_id: data.list_id,
+        title: data.title,
+        messages: Array.isArray(data.messages) ? data.messages as ChatMessage[] : [],
+        created_at: data.created_at,
+        updated_at: data.updated_at,
+      };
+      
       setCurrentChat(newChat);
       await fetchChatHistory();
       return newChat;
@@ -91,7 +110,7 @@ export const useChatHistory = (listId?: string) => {
       const { error } = await supabase
         .from('chat_history')
         .update({ 
-          messages,
+          messages: messages,
           updated_at: new Date().toISOString()
         })
         .eq('id', chatId);

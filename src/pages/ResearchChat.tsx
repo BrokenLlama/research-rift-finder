@@ -184,8 +184,8 @@ const ResearchChat = () => {
         content: msg.content
       }));
 
-      // Call our OpenRouter edge function
-      const response = await supabase.functions.invoke('openrouter-chat', {
+      // Call our Groq edge function instead of OpenRouter
+      const response = await supabase.functions.invoke('groq-chat', {
         body: {
           messages: chatMessages,
           papers: papers,
@@ -315,7 +315,7 @@ const ResearchChat = () => {
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Bot className="h-5 w-5 mr-2 text-blue-600" />
-                  Chat with {listName || 'Your Papers'} ({papers.length} papers)
+                  Chat with {listName || 'Your Papers'} ({papers.length} papers) - Powered by Groq
                 </CardTitle>
               </CardHeader>
               

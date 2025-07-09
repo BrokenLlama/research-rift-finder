@@ -1,237 +1,252 @@
 
 import React, { useState, useEffect } from 'react';
+import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, ExternalLink } from 'lucide-react';
-import { searchPapers } from '@/services/paperSearch';
-import EnhancedAddToListButton from '@/components/EnhancedAddToListButton';
-import RecentSearches from '@/components/RecentSearches';
-import { useSearchHistory } from '@/hooks/useSearchHistory';
+import { Search, BookOpen, Users, Calendar } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { EnhancedAddToListButton } from '@/components/EnhancedAddToListButton';
+import { RecentSearches } from '@/components/RecentSearches';
+import { useSearchHistory } from '@/hooks/useSearchHistory';
 
-interface Paper {
-  id: string;
-  title: string;
-  authors: string[];
-  abstract?: string;
-  publication_year?: number;
-  journal?: string;
-  url?: string;
-}
+// Mock paper search function - replace with actual implementation
+const mockSearchPapers = async (query: string, filters: any = {}) => {
+  // This is a mock implementation - replace with actual API call
+  const mockPapers = [
+    {
+      id: '1',
+      title: 'Machine Learning Applications in Healthcare',
+      authors: ['John Doe', 'Jane Smith'],
+      abstract: 'This paper explores the various applications of machine learning in healthcare...',
+      publication_year: 2023,
+      journal: 'Nature Medicine',
+      external_id: 'arxiv-123456'
+    },
+    {
+      id: '2',
+      title: 'Climate Change and Its Impact on Biodiversity',
+      authors: ['Alice Johnson', 'Bob Wilson'],
+      abstract: 'An analysis of how climate change affects global biodiversity patterns...',
+      publication_year: 2023,
+      journal: 'Science',
+      external_id: 'doi-789012'
+    }
+  ];
+  
+  return mockPapers.filter(paper => 
+    paper.title.toLowerCase().includes(query.toLowerCase()) ||
+    paper.abstract.toLowerCase().includes(query.toLowerCase())
+  );
+};
 
 const Home = () => {
   const { user } = useAuth();
   const { saveSearch } = useSearchHistory();
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Paper[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedFilters, setSelectedFilters] = useState({});
 
-  // Load search state from localStorage on component mount
+  // Load last search from localStorage on component mount
   useEffect(() => {
-    const savedSearch = localStorage.getItem('lastSearch');
-    if (savedSearch) {
+    const lastSearch = localStorage.getItem('lastSearchQuery');
+    const lastResults = localStorage.getItem('lastSearchResults');
+    
+    if (lastSearch) {
+      setSearchQuery(lastSearch);
+    }
+    
+    if (lastResults) {
       try {
-        const { query: savedQuery, results: savedResults } = JSON.parse(savedSearch);
-        if (savedQuery && savedResults) {
-          setQuery(savedQuery);
-          setResults(savedResults);
-          setHasSearched(true);
-        }
+        setSearchResults(JSON.parse(lastResults));
       } catch (error) {
-        console.error('Error loading saved search:', error);
+        console.error('Error parsing last search results:', error);
       }
     }
   }, []);
 
-  // Save search state to localStorage whenever results change
+  // Save search state to localStorage whenever it changes
   useEffect(() => {
-    if (hasSearched && query && results.length > 0) {
-      localStorage.setItem('lastSearch', JSON.stringify({ query, results }));
+    if (searchQuery) {
+      localStorage.setItem('lastSearchQuery', searchQuery);
     }
-  }, [query, results, hasSearched]);
+  }, [searchQuery]);
 
-  const handleSearch = async (searchQuery: string = query, filters: any = {}) => {
-    if (!searchQuery.trim()) return;
+  useEffect(() => {
+    if (searchResults.length > 0) {
+      localStorage.setItem('lastSearchResults', JSON.stringify(searchResults));
+    }
+  }, [searchResults]);
 
-    setLoading(true);
-    setHasSearched(true);
+  const handleSearch = async (query?: string, filters?: any) => {
+    const searchTerm = query || searchQuery;
+    const searchFilters = filters || selectedFilters;
     
-    // Update query if different from current
-    if (searchQuery !== query) {
-      setQuery(searchQuery);
-    }
+    if (!searchTerm.trim()) return;
 
+    setIsLoading(true);
     try {
-      const searchResults = await searchPapers(searchQuery);
-      setResults(searchResults);
+      const results = await mockSearchPapers(searchTerm, searchFilters);
+      setSearchResults(results);
       
       // Save search to history if user is logged in
       if (user) {
-        await saveSearch(searchQuery, filters, searchResults.length);
+        await saveSearch(searchTerm, searchFilters, results.length);
       }
     } catch (error) {
       console.error('Search error:', error);
-      setResults([]);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  const handleSearchSelect = (selectedQuery: string, filters: any) => {
-    handleSearch(selectedQuery, filters);
+  const handleRecentSearchClick = (searchData: { query: string, filters: any }) => {
+    setSearchQuery(searchData.query);
+    setSelectedFilters(searchData.filters);
+    handleSearch(searchData.query, searchData.filters);
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <Navigation />
+      
       <div className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">
-              Research Paper Search
-            </h1>
-            <p className="text-xl text-gray-600">
-              Discover and organize academic papers with AI-powered insights
-            </p>
-          </div>
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">
+            Research Paper Discovery
+          </h1>
+          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+            Search, organize, and chat with academic papers using AI-powered tools
+          </p>
+        </div>
 
-          <div className="mb-8">
+        {/* Search Section */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Search className="h-5 w-5 mr-2" />
+              Search Papers
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
             <div className="flex space-x-2">
               <Input
-                type="text"
-                placeholder="Search for research papers..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Enter keywords, authors, or topics..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                 className="flex-1"
               />
               <Button 
                 onClick={() => handleSearch()}
-                disabled={loading || !query.trim()}
+                disabled={isLoading || !searchQuery.trim()}
               >
-                <Search className="h-4 w-4 mr-2" />
-                {loading ? 'Searching...' : 'Search'}
+                {isLoading ? 'Searching...' : 'Search'}
               </Button>
             </div>
-          </div>
+          </CardContent>
+        </Card>
 
-          {/* Recent Searches Section - Only show if user is logged in */}
-          {user && (
-            <div className="mb-8">
-              <RecentSearches onSearchSelect={handleSearchSelect} />
-            </div>
-          )}
+        {/* Recent Searches Section - Only show if user is logged in */}
+        {user && (
+          <RecentSearches onSearchClick={handleRecentSearchClick} />
+        )}
 
-          {/* Search Results */}
-          {hasSearched && (
-            <div className="space-y-4">
-              {loading ? (
-                <div className="space-y-4">
-                  {[...Array(3)].map((_, i) => (
-                    <Card key={i} className="animate-pulse">
-                      <CardContent className="p-6">
-                        <div className="h-6 bg-gray-200 rounded mb-4"></div>
-                        <div className="h-4 bg-gray-200 rounded mb-2"></div>
-                        <div className="h-4 bg-gray-200 rounded mb-2"></div>
-                        <div className="h-4 bg-gray-200 rounded w-2/3"></div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              ) : results.length > 0 ? (
-                <>
-                  <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-2xl font-semibold">
-                      Search Results ({results.length})
-                    </h2>
-                  </div>
-                  {results.map((paper) => (
-                    <Card key={paper.id} className="hover:shadow-md transition-shadow">
-                      <CardHeader>
-                        <div className="flex justify-between items-start">
-                          <CardTitle className="text-lg leading-tight mb-2">
-                            {paper.title}
-                          </CardTitle>
-                          <div className="flex space-x-2 ml-4">
-                            <EnhancedAddToListButton paper={paper} />
-                            {paper.url && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => window.open(paper.url, '_blank')}
-                              >
-                                <ExternalLink className="h-4 w-4 mr-1" />
-                                View
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-3">
-                          <div className="flex flex-wrap gap-2">
-                            {paper.authors.slice(0, 5).map((author, index) => (
-                              <Badge key={index} variant="secondary">
-                                {author}
-                              </Badge>
-                            ))}
-                            {paper.authors.length > 5 && (
-                              <Badge variant="secondary">
-                                +{paper.authors.length - 5} more
-                              </Badge>
-                            )}
-                          </div>
-                          
-                          {paper.abstract && (
-                            <p className="text-gray-700 text-sm leading-relaxed">
-                              {paper.abstract.length > 300
-                                ? `${paper.abstract.slice(0, 300)}...`
-                                : paper.abstract}
-                            </p>
-                          )}
-                          
-                          <div className="flex items-center space-x-4 text-sm text-gray-500">
-                            {paper.publication_year && (
-                              <span>Year: {paper.publication_year}</span>
-                            )}
-                            {paper.journal && (
-                              <span>Journal: {paper.journal}</span>
-                            )}
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </>
-              ) : (
-                <Card>
-                  <CardContent className="text-center py-8">
-                    <p className="text-gray-500">
-                      No papers found for "{query}". Try different keywords or check your spelling.
+        {/* Search Results */}
+        {searchResults.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Search Results ({searchResults.length} papers found)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {searchResults.map((paper) => (
+                  <div key={paper.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="text-lg font-semibold text-blue-600 hover:text-blue-800">
+                        {paper.title}
+                      </h3>
+                      {user && <EnhancedAddToListButton paper={paper} />}
+                    </div>
+                    
+                    <div className="flex items-center space-x-4 text-sm text-gray-600 mb-2">
+                      <div className="flex items-center">
+                        <Users className="h-4 w-4 mr-1" />
+                        {paper.authors.join(', ')}
+                      </div>
+                      <div className="flex items-center">
+                        <Calendar className="h-4 w-4 mr-1" />
+                        {paper.publication_year}
+                      </div>
+                      <div className="flex items-center">
+                        <BookOpen className="h-4 w-4 mr-1" />
+                        {paper.journal}
+                      </div>
+                    </div>
+                    
+                    <p className="text-gray-700 mb-2">
+                      {paper.abstract}
                     </p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          )}
+                    
+                    <Badge variant="secondary">
+                      {paper.external_id}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-          {!hasSearched && !user && (
+        {/* Features Overview */}
+        {searchResults.length === 0 && (
+          <div className="grid md:grid-cols-3 gap-6 mt-8">
             <Card>
-              <CardContent className="text-center py-12">
-                <Search className="h-16 w-16 mx-auto mb-4 text-gray-400" />
-                <h3 className="text-xl font-semibold mb-2">Start Your Research Journey</h3>
-                <p className="text-gray-600 mb-4">
-                  Search for academic papers and organize them into collections
-                </p>
-                <p className="text-sm text-gray-500">
-                  Sign in to save your searches and create paper lists
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Search className="h-5 w-5 mr-2 text-blue-600" />
+                  Smart Search
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600">
+                  Find relevant papers using advanced search algorithms and filters
                 </p>
               </CardContent>
             </Card>
-          )}
-        </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <BookOpen className="h-5 w-5 mr-2 text-green-600" />
+                  Organize Lists
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600">
+                  Create custom lists to organize papers by topic, project, or research area
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Users className="h-5 w-5 mr-2 text-purple-600" />
+                  AI Chat
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600">
+                  Chat with your papers using AI to get insights, summaries, and answers
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );
