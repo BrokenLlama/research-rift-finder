@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/button';
@@ -152,7 +151,7 @@ const Home = () => {
 
         {/* Recent Searches Section - Only show if user is logged in */}
         {user && (
-          <RecentSearches onSearchClick={handleRecentSearchClick} />
+          <RecentSearches onSearchSelect={handleRecentSearchClick} />
         )}
 
         {/* Search Results */}
