@@ -105,7 +105,7 @@ const Home = () => {
     }));
   };
 
-  const updateStringFilter = (key: 'author' | 'fieldOfStudy', value: string) => {
+  const updateStringFilter = (key: keyof Pick<SearchFilters, 'author' | 'fieldOfStudy'>, value: string) => {
     setFilters(prev => ({
       ...prev,
       [key]: value.trim() || undefined

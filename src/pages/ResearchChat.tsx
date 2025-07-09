@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -163,7 +162,6 @@ const ResearchChat = () => {
         throw saveError;
       }
 
-      // Cast the saved message to our interface
       const typedUserMessage: Message = {
         id: savedMessage.id,
         role: 'user',
@@ -180,8 +178,8 @@ const ResearchChat = () => {
         content: msg.content
       }));
 
-      // Call our edge function for chat completion
-      const response = await supabase.functions.invoke('chat-completion', {
+      // Call our Gemini edge function
+      const response = await supabase.functions.invoke('gemini-chat', {
         body: {
           messages: chatMessages,
           papers: papers,
@@ -209,7 +207,6 @@ const ResearchChat = () => {
         throw assistantError;
       }
 
-      // Cast the assistant message to our interface
       const typedAssistantMessage: Message = {
         id: assistantMessage.id,
         role: 'assistant',
