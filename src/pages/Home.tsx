@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Search, BookOpen, Users, Calendar, FileText, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -105,7 +104,7 @@ const Home = () => {
     }));
   };
 
-  const updateStringFilter = (key: keyof Pick<SearchFilters, 'author' | 'fieldOfStudy'>, value: string) => {
+  const updateStringFilter = (key: 'author' | 'fieldOfStudy', value: string) => {
     setFilters(prev => ({
       ...prev,
       [key]: value.trim() || undefined
