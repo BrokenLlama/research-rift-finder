@@ -3,7 +3,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { MessageCircle, Plus, Trash2 } from 'lucide-react';
+import { MessageCircle, Plus, Trash2, FileText } from 'lucide-react';
 import { useChatHistory } from '@/hooks/useChatHistory';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -60,7 +60,7 @@ const ChatHistorySidebar: React.FC<ChatHistorySidebarProps> = ({
         <CardTitle className="flex items-center justify-between text-sm">
           <div className="flex items-center">
             <MessageCircle className="h-4 w-4 mr-2" />
-            Past Chats
+            Chat History
           </div>
           <Button
             variant="ghost"
@@ -101,8 +101,11 @@ const ChatHistorySidebar: React.FC<ChatHistorySidebarProps> = ({
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">{chat.title}</p>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <div className="flex items-center mb-1">
+                        <FileText className="h-3 w-3 mr-1 text-gray-400" />
+                        <p className="font-medium text-sm truncate">{chat.title}</p>
+                      </div>
+                      <p className="text-xs text-gray-500 mb-1">
                         {Array.isArray(chat.messages) ? chat.messages.length : 0} messages
                       </p>
                       <p className="text-xs text-gray-400">

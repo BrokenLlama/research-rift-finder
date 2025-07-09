@@ -26,9 +26,10 @@ interface Paper {
 
 interface AddToListButtonProps {
   paper: Paper;
+  onListUpdate?: () => void;
 }
 
-const AddToListButton = ({ paper }: AddToListButtonProps) => {
+const AddToListButton = ({ paper, onListUpdate }: AddToListButtonProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [lists, setLists] = useState<PaperList[]>([]);
@@ -65,7 +66,6 @@ const AddToListButton = ({ paper }: AddToListButtonProps) => {
     
     setIsCreatingList(true);
     try {
-      // Create the new list
       const { data: newList, error: createError } = await supabase
         .from('paper_lists')
         .insert({
@@ -79,15 +79,16 @@ const AddToListButton = ({ paper }: AddToListButtonProps) => {
         throw createError;
       }
 
-      // Add the paper to the new list
       await addPaperToList(newList.id, newList.name);
       
-      // Refresh the lists
       await fetchLists();
       
-      // Close dialog
       setShowCreateDialog(false);
       setNewListName('');
+      
+      if (onListUpdate) {
+        onListUpdate();
+      }
       
     } catch (error) {
       console.error('Error creating list and adding paper:', error);
@@ -105,7 +106,6 @@ const AddToListButton = ({ paper }: AddToListButtonProps) => {
     if (!user) return;
     
     try {
-      // Check if paper already exists in this list
       const { data: existingPaper, error: checkError } = await supabase
         .from('papers')
         .select('id')
