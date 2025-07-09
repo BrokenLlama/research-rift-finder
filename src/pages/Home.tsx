@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/button';
@@ -101,10 +102,10 @@ const Home = () => {
     }
   };
 
-  const handleRecentSearchClick = (searchData: { query: string, filters: any }) => {
-    setSearchQuery(searchData.query);
-    setSelectedFilters(searchData.filters);
-    handleSearch(searchData.query, searchData.filters);
+  const handleRecentSearchClick = (query: string, filters: any) => {
+    setSearchQuery(query);
+    setSelectedFilters(filters);
+    handleSearch(query, filters);
   };
 
   return (
