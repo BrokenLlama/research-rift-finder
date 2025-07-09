@@ -5,69 +5,59 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, BookOpen, Users, Calendar } from 'lucide-react';
+import { Search, BookOpen, Users, Calendar, ExternalLink, FileText } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import EnhancedAddToListButton from '@/components/EnhancedAddToListButton';
 import RecentSearches from '@/components/RecentSearches';
+import SearchFilters from '@/components/SearchFilters';
 import { useSearchHistory } from '@/hooks/useSearchHistory';
-
-// Mock paper search function - replace with actual implementation
-const mockSearchPapers = async (query: string, filters: any = {}) => {
-  // This is a mock implementation - replace with actual API call
-  const mockPapers = [
-    {
-      id: '1',
-      title: 'Machine Learning Applications in Healthcare',
-      authors: ['John Doe', 'Jane Smith'],
-      abstract: 'This paper explores the various applications of machine learning in healthcare...',
-      publication_year: 2023,
-      journal: 'Nature Medicine',
-      external_id: 'arxiv-123456'
-    },
-    {
-      id: '2',
-      title: 'Climate Change and Its Impact on Biodiversity',
-      authors: ['Alice Johnson', 'Bob Wilson'],
-      abstract: 'An analysis of how climate change affects global biodiversity patterns...',
-      publication_year: 2023,
-      journal: 'Science',
-      external_id: 'doi-789012'
-    }
-  ];
-  
-  return mockPapers.filter(paper => 
-    paper.title.toLowerCase().includes(query.toLowerCase()) ||
-    paper.abstract.toLowerCase().includes(query.toLowerCase())
-  );
-};
+import { openAlexService, OpenAlexFilters, OpenAlexPaper } from '@/services/openAlexService';
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
+import { useNavigate } from 'react-router-dom';
 
 const Home = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { saveSearch } = useSearchHistory();
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchResults, setSearchResults] = useState<OpenAlexPaper[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedFilters, setSelectedFilters] = useState({});
+  const [filters, setFilters] = useState<OpenAlexFilters>({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalResults, setTotalResults] = useState(0);
+  const [perPage] = useState(25);
 
   // Load last search from localStorage on component mount
   useEffect(() => {
     const lastSearch = localStorage.getItem('lastSearchQuery');
+    const lastFilters = localStorage.getItem('lastSearchFilters');
     const lastResults = localStorage.getItem('lastSearchResults');
     
     if (lastSearch) {
       setSearchQuery(lastSearch);
     }
     
+    if (lastFilters) {
+      try {
+        setFilters(JSON.parse(lastFilters));
+      } catch (error) {
+        console.error('Error parsing last search filters:', error);
+      }
+    }
+    
     if (lastResults) {
       try {
-        setSearchResults(JSON.parse(lastResults));
+        const parsedResults = JSON.parse(lastResults);
+        setSearchResults(parsedResults.results || []);
+        setTotalResults(parsedResults.total || 0);
+        setCurrentPage(parsedResults.page || 1);
       } catch (error) {
         console.error('Error parsing last search results:', error);
       }
     }
   }, []);
 
-  // Save search state to localStorage whenever it changes
+  // Save search state to localStorage
   useEffect(() => {
     if (searchQuery) {
       localStorage.setItem('lastSearchQuery', searchQuery);
@@ -75,38 +65,85 @@ const Home = () => {
   }, [searchQuery]);
 
   useEffect(() => {
-    if (searchResults.length > 0) {
-      localStorage.setItem('lastSearchResults', JSON.stringify(searchResults));
-    }
-  }, [searchResults]);
+    localStorage.setItem('lastSearchFilters', JSON.stringify(filters));
+  }, [filters]);
 
-  const handleSearch = async (query?: string, filters?: any) => {
+  useEffect(() => {
+    if (searchResults.length > 0) {
+      localStorage.setItem('lastSearchResults', JSON.stringify({
+        results: searchResults,
+        total: totalResults,
+        page: currentPage
+      }));
+    }
+  }, [searchResults, totalResults, currentPage]);
+
+  const handleSearch = async (query?: string, searchFilters?: OpenAlexFilters, page?: number) => {
     const searchTerm = query || searchQuery;
-    const searchFilters = filters || selectedFilters;
+    const searchPage = page || 1;
+    const appliedFilters = searchFilters || filters;
     
     if (!searchTerm.trim()) return;
 
     setIsLoading(true);
     try {
-      const results = await mockSearchPapers(searchTerm, searchFilters);
-      setSearchResults(results);
+      const response = await openAlexService.searchPapers(
+        searchTerm,
+        searchPage,
+        perPage,
+        appliedFilters
+      );
+      
+      setSearchResults(response.results);
+      setTotalResults(response.meta.count);
+      setCurrentPage(searchPage);
       
       // Save search to history if user is logged in
       if (user) {
-        await saveSearch(searchTerm, searchFilters, results.length);
+        await saveSearch(searchTerm, appliedFilters, response.results.length);
       }
     } catch (error) {
       console.error('Search error:', error);
+      setSearchResults([]);
+      setTotalResults(0);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleRecentSearchClick = (query: string, filters: any) => {
-    setSearchQuery(query);
-    setSelectedFilters(filters);
-    handleSearch(query, filters);
+  const handlePageChange = (page: number) => {
+    handleSearch(searchQuery, filters, page);
   };
+
+  const handleFiltersChange = (newFilters: OpenAlexFilters) => {
+    setFilters(newFilters);
+    setCurrentPage(1);
+    if (searchQuery.trim()) {
+      handleSearch(searchQuery, newFilters, 1);
+    }
+  };
+
+  const handleClearFilters = () => {
+    setFilters({});
+    setCurrentPage(1);
+    if (searchQuery.trim()) {
+      handleSearch(searchQuery, {}, 1);
+    }
+  };
+
+  const handleRecentSearchClick = (query: string, searchFilters: any) => {
+    setSearchQuery(query);
+    setFilters(searchFilters);
+    setCurrentPage(1);
+    handleSearch(query, searchFilters, 1);
+  };
+
+  const handlePaperClick = (paper: OpenAlexPaper) => {
+    // Navigate to paper details page
+    navigate(`/paper/openalex/${encodeURIComponent(paper.id)}`);
+  };
+
+  const totalPages = Math.ceil(totalResults / perPage);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -134,7 +171,7 @@ const Home = () => {
           <CardContent>
             <div className="flex space-x-2">
               <Input
-                placeholder="Enter keywords, authors, or topics..."
+                placeholder="Enter keywords, topics, or research questions..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
@@ -150,6 +187,13 @@ const Home = () => {
           </CardContent>
         </Card>
 
+        {/* Advanced Filters */}
+        <SearchFilters
+          filters={filters}
+          onFiltersChange={handleFiltersChange}
+          onClearFilters={handleClearFilters}
+        />
+
         {/* Recent Searches Section - Only show if user is logged in */}
         {user && (
           <RecentSearches onSearchSelect={handleRecentSearchClick} />
@@ -157,52 +201,193 @@ const Home = () => {
 
         {/* Search Results */}
         {searchResults.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Search Results ({searchResults.length} papers found)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {searchResults.map((paper) => (
-                  <div key={paper.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="text-lg font-semibold text-blue-600 hover:text-blue-800">
-                        {paper.title}
-                      </h3>
-                      {user && <EnhancedAddToListButton paper={paper} />}
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  Search Results ({totalResults.toLocaleString()} papers found)
+                  {currentPage > 1 && (
+                    <span className="text-sm font-normal text-gray-600 ml-2">
+                      - Page {currentPage} of {totalPages}
+                    </span>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  {searchResults.map((paper) => (
+                    <div 
+                      key={paper.id} 
+                      className="border rounded-lg p-6 hover:shadow-md transition-shadow cursor-pointer"
+                      onClick={() => handlePaperClick(paper)}
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <h3 className="text-lg font-semibold text-blue-600 hover:text-blue-800 leading-tight">
+                          {paper.title}
+                        </h3>
+                        {user && (
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <EnhancedAddToListButton 
+                              paper={{
+                                id: paper.id,
+                                title: paper.title,
+                                authors: paper.authors.map(a => a.display_name),
+                                abstract: paper.abstract,
+                                publication_year: paper.publication_year,
+                                journal: paper.primary_location?.source?.display_name || paper.host_venue?.display_name,
+                                external_id: paper.id
+                              }} 
+                            />
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 mb-3">
+                        <div className="flex items-center">
+                          <Users className="h-4 w-4 mr-1" />
+                          {paper.authors.slice(0, 3).map(a => a.display_name).join(', ')}
+                          {paper.authors.length > 3 && ` +${paper.authors.length - 3} more`}
+                        </div>
+                        <div className="flex items-center">
+                          <Calendar className="h-4 w-4 mr-1" />
+                          {paper.publication_year}
+                        </div>
+                        {(paper.primary_location?.source?.display_name || paper.host_venue?.display_name) && (
+                          <div className="flex items-center">
+                            <BookOpen className="h-4 w-4 mr-1" />
+                            {paper.primary_location?.source?.display_name || paper.host_venue?.display_name}
+                          </div>
+                        )}
+                        <div className="flex items-center">
+                          <span className="text-xs bg-gray-100 px-2 py-1 rounded">
+                            {paper.cited_by_count} citations
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {paper.abstract && (
+                        <p className="text-gray-700 mb-3 line-clamp-3">
+                          {paper.abstract.substring(0, 300)}
+                          {paper.abstract.length > 300 && '...'}
+                        </p>
+                      )}
+                      
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {paper.concepts?.slice(0, 3).map((concept) => (
+                          <Badge key={concept.display_name} variant="secondary" className="text-xs">
+                            {concept.display_name}
+                          </Badge>
+                        ))}
+                        {paper.open_access?.is_oa && (
+                          <Badge variant="outline" className="text-green-600 border-green-600">
+                            Open Access
+                          </Badge>
+                        )}
+                        {paper.best_oa_location?.pdf_url && (
+                          <Badge variant="outline" className="text-blue-600 border-blue-600">
+                            PDF Available
+                          </Badge>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          {paper.doi && (
+                            <Badge variant="outline" className="text-xs">
+                              DOI: {paper.doi.replace('https://doi.org/', '')}
+                            </Badge>
+                          )}
+                        </div>
+                        
+                        <div className="flex items-center space-x-2">
+                          {paper.best_oa_location?.pdf_url && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(paper.best_oa_location?.pdf_url, '_blank');
+                              }}
+                            >
+                              <FileText className="h-4 w-4 mr-1" />
+                              View PDF
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePaperClick(paper);
+                            }}
+                          >
+                            <ExternalLink className="h-4 w-4 mr-1" />
+                            Details
+                          </Button>
+                        </div>
+                      </div>
                     </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="mt-6 flex justify-center">
+                <Pagination>
+                  <PaginationContent>
+                    {currentPage > 1 && (
+                      <PaginationItem>
+                        <PaginationPrevious 
+                          onClick={() => handlePageChange(currentPage - 1)}
+                          className="cursor-pointer"
+                        />
+                      </PaginationItem>
+                    )}
                     
-                    <div className="flex items-center space-x-4 text-sm text-gray-600 mb-2">
-                      <div className="flex items-center">
-                        <Users className="h-4 w-4 mr-1" />
-                        {paper.authors.join(', ')}
-                      </div>
-                      <div className="flex items-center">
-                        <Calendar className="h-4 w-4 mr-1" />
-                        {paper.publication_year}
-                      </div>
-                      <div className="flex items-center">
-                        <BookOpen className="h-4 w-4 mr-1" />
-                        {paper.journal}
-                      </div>
-                    </div>
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum;
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+                      
+                      return (
+                        <PaginationItem key={pageNum}>
+                          <PaginationLink
+                            onClick={() => handlePageChange(pageNum)}
+                            isActive={currentPage === pageNum}
+                            className="cursor-pointer"
+                          >
+                            {pageNum}
+                          </PaginationLink>
+                        </PaginationItem>
+                      );
+                    })}
                     
-                    <p className="text-gray-700 mb-2">
-                      {paper.abstract}
-                    </p>
-                    
-                    <Badge variant="secondary">
-                      {paper.external_id}
-                    </Badge>
-                  </div>
-                ))}
+                    {currentPage < totalPages && (
+                      <PaginationItem>
+                        <PaginationNext 
+                          onClick={() => handlePageChange(currentPage + 1)}
+                          className="cursor-pointer"
+                        />
+                      </PaginationItem>
+                    )}
+                  </PaginationContent>
+                </Pagination>
               </div>
-            </CardContent>
-          </Card>
+            )}
+          </>
         )}
 
         {/* Features Overview */}
-        {searchResults.length === 0 && (
+        {searchResults.length === 0 && !isLoading && (
           <div className="grid md:grid-cols-3 gap-6 mt-8">
             <Card>
               <CardHeader>
@@ -213,7 +398,7 @@ const Home = () => {
               </CardHeader>
               <CardContent>
                 <p className="text-gray-600">
-                  Find relevant papers using advanced search algorithms and filters
+                  Find relevant papers using OpenAlex database with advanced search and filters
                 </p>
               </CardContent>
             </Card>

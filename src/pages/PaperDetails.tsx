@@ -1,38 +1,27 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, Calendar, FileText, ExternalLink, Quote, Star } from 'lucide-react';
+import { 
+  ArrowLeft, Users, Calendar, FileText, ExternalLink, Quote, 
+  Star, BookOpen, MessageSquare, Plus, Download 
+} from 'lucide-react';
 import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import AddToListButton from '@/components/AddToListButton';
-
-interface PaperDetailsData {
-  title: string;
-  authors: Array<{ name: string }>;
-  year: number;
-  journal?: string;
-  abstract?: string;
-  external_id: string;
-  source: string;
-  url?: string;
-  externalIds?: {
-    DOI?: string;
-    ArXiv?: string;
-    PubMed?: string;
-  };
-}
+import { Separator } from '@/components/ui/separator';
+import EnhancedAddToListButton from '@/components/EnhancedAddToListButton';
+import { openAlexService, OpenAlexPaper } from '@/services/openAlexService';
 
 const PaperDetails = () => {
   const { paperId, source } = useParams();
   const navigate = useNavigate();
-  const [paper, setPaper] = useState<PaperDetailsData | null>(null);
+  const [paper, setPaper] = useState<OpenAlexPaper | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (paperId && source) {
+    if (paperId && source === 'openalex') {
       fetchPaperDetails();
     }
   }, [paperId, source]);
@@ -42,35 +31,37 @@ const PaperDetails = () => {
     setError(null);
     
     try {
-      // For now, using mock data since we'd need to implement individual paper fetching
-      // In a real implementation, you'd fetch from Semantic Scholar API with specific paper ID
-      const mockPaper: PaperDetailsData = {
-        title: "Machine Learning Applications in Climate Change Research: A Comprehensive Survey",
-        authors: [
-          { name: "Dr. Jane Smith" },
-          { name: "Prof. Michael Johnson" },
-          { name: "Dr. Sarah Chen" },
-          { name: "Dr. Robert Williams" }
-        ],
-        year: 2024,
-        journal: "Nature Climate Change",
-        abstract: "This comprehensive survey examines the rapidly growing field of machine learning applications in climate change research. We analyze over 500 recent publications to identify key trends, methodologies, and breakthrough applications. Our findings reveal significant advances in climate modeling, extreme weather prediction, and carbon footprint analysis using deep learning techniques. The survey covers supervised and unsupervised learning approaches, neural networks, and ensemble methods applied to various climate datasets. We also discuss challenges such as data quality, model interpretability, and computational requirements. The review concludes with recommendations for future research directions and potential policy implications of ML-driven climate science.",
-        external_id: paperId as string,
-        source: source as string,
-        url: "https://example.com/paper",
-        externalIds: {
-          DOI: "10.1038/s41558-2024-01234-5",
-          ArXiv: "2024.12345"
-        }
-      };
+      const decodedPaperId = decodeURIComponent(paperId as string);
+      const fetchedPaper = await openAlexService.getPaperById(decodedPaperId);
       
-      setPaper(mockPaper);
+      if (fetchedPaper) {
+        setPaper(fetchedPaper);
+      } else {
+        setError('Paper not found');
+      }
     } catch (err) {
       setError('Failed to load paper details');
       console.error('Error fetching paper details:', err);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSummarizePaper = () => {
+    // Navigate to summarize page with paper data
+    navigate('/summarize', { 
+      state: { 
+        paperTitle: paper?.title,
+        paperAbstract: paper?.abstract,
+        paperAuthors: paper?.authors.map(a => a.display_name)
+      } 
+    });
+  };
+
+  const formatAuthors = (authors: Array<{ display_name: string }>) => {
+    if (authors.length === 0) return 'Unknown authors';
+    if (authors.length <= 3) return authors.map(a => a.display_name).join(', ');
+    return `${authors.slice(0, 3).map(a => a.display_name).join(', ')} +${authors.length - 3} more`;
   };
 
   if (isLoading) {
@@ -105,145 +96,294 @@ const PaperDetails = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navigation />
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <div className="container mx-auto px-4 py-8 max-w-5xl">
         {/* Header */}
-        <div className="flex items-center mb-8">
+        <div className="flex items-center justify-between mb-8">
           <Button 
             variant="ghost" 
             onClick={() => navigate(-1)}
-            className="mr-4"
+            className="flex items-center"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back
           </Button>
-          <Badge variant="secondary" className="ml-auto">
-            Semantic Scholar
-          </Badge>
+          <div className="flex items-center space-x-2">
+            <Badge variant="secondary">OpenAlex</Badge>
+            {paper.open_access?.is_oa && (
+              <Badge variant="outline" className="text-green-600 border-green-600">
+                Open Access
+              </Badge>
+            )}
+            {paper.best_oa_location?.pdf_url && (
+              <Badge variant="outline" className="text-blue-600 border-blue-600">
+                PDF Available
+              </Badge>
+            )}
+          </div>
         </div>
 
-        {/* Main Content */}
-        <div className="space-y-6">
-          {/* Title and Basic Info */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-2xl leading-tight">
-                {paper.url ? (
-                  <a 
-                    href={paper.url} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="hover:text-blue-600 transition-colors inline-flex items-center gap-2"
-                  >
-                    {paper.title}
-                    <ExternalLink className="h-5 w-5" />
-                  </a>
-                ) : (
-                  paper.title
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-wrap gap-4 text-sm text-gray-600">
-                <div className="flex items-center">
-                  <Users className="h-4 w-4 mr-2" />
-                  <span>{paper.authors.map(a => a.name).join(', ')}</span>
-                </div>
-                
-                <div className="flex items-center">
-                  <Calendar className="h-4 w-4 mr-2" />
-                  <span>{paper.year}</span>
-                </div>
-                
-                {paper.journal && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main Content */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Title and Basic Info */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-2xl leading-tight mb-4">
+                  {paper.title}
+                </CardTitle>
+                <div className="flex flex-wrap gap-4 text-sm text-gray-600">
                   <div className="flex items-center">
-                    <FileText className="h-4 w-4 mr-2" />
-                    <span>{paper.journal}</span>
+                    <Users className="h-4 w-4 mr-2" />
+                    <span>{formatAuthors(paper.authors)}</span>
+                  </div>
+                  
+                  <div className="flex items-center">
+                    <Calendar className="h-4 w-4 mr-2" />
+                    <span>{paper.publication_year}</span>
+                  </div>
+                  
+                  {(paper.primary_location?.source?.display_name || paper.host_venue?.display_name) && (
+                    <div className="flex items-center">
+                      <BookOpen className="h-4 w-4 mr-2" />
+                      <span>{paper.primary_location?.source?.display_name || paper.host_venue?.display_name}</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center">
+                    <Quote className="h-4 w-4 mr-2" />
+                    <span>{paper.cited_by_count} citations</span>
+                  </div>
+                </div>
+              </CardHeader>
+            </Card>
+
+            {/* Abstract */}
+            {paper.abstract && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Abstract</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
+                    {paper.abstract}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Concepts/Keywords */}
+            {paper.concepts && paper.concepts.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Key Concepts</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {paper.concepts.map((concept) => (
+                      <Badge 
+                        key={concept.display_name} 
+                        variant="secondary"
+                        className="text-sm"
+                      >
+                        {concept.display_name}
+                        <span className="ml-1 text-xs opacity-75">
+                          ({Math.round(concept.score * 100)}%)
+                        </span>
+                      </Badge>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Publication Details */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Publication Details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <span className="font-medium">Publication Date: </span>
+                    <span className="text-gray-600">
+                      {paper.publication_date || `${paper.publication_year}`}
+                    </span>
+                  </div>
+                  
+                  {paper.primary_location?.source?.type && (
+                    <div>
+                      <span className="font-medium">Source Type: </span>
+                      <span className="text-gray-600">
+                        {paper.primary_location.source.type}
+                      </span>
+                    </div>
+                  )}
+
+                  {paper.biblio?.volume && (
+                    <div>
+                      <span className="font-medium">Volume: </span>
+                      <span className="text-gray-600">{paper.biblio.volume}</span>
+                    </div>
+                  )}
+
+                  {paper.biblio?.issue && (
+                    <div>
+                      <span className="font-medium">Issue: </span>
+                      <span className="text-gray-600">{paper.biblio.issue}</span>
+                    </div>
+                  )}
+
+                  {(paper.biblio?.first_page || paper.biblio?.last_page) && (
+                    <div>
+                      <span className="font-medium">Pages: </span>
+                      <span className="text-gray-600">
+                        {paper.biblio.first_page}
+                        {paper.biblio.last_page && paper.biblio.first_page !== paper.biblio.last_page 
+                          ? `-${paper.biblio.last_page}` 
+                          : ''
+                        }
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {paper.doi && (
+                  <div className="pt-2 border-t">
+                    <span className="font-medium">DOI: </span>
+                    <a 
+                      href={paper.doi}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 underline"
+                    >
+                      {paper.doi.replace('https://doi.org/', '')}
+                    </a>
                   </div>
                 )}
-              </div>
+              </CardContent>
+            </Card>
+          </div>
 
-              <div className="flex gap-2">
-                <AddToListButton 
+          {/* Sidebar */}
+          <div className="space-y-6">
+            {/* Actions */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Actions</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <EnhancedAddToListButton 
                   paper={{
+                    id: paper.id,
                     title: paper.title,
-                    authors: paper.authors.map(a => a.name),
+                    authors: paper.authors.map(a => a.display_name),
                     abstract: paper.abstract,
-                    publication_year: paper.year,
-                    journal: paper.journal,
-                    external_id: paper.external_id
+                    publication_year: paper.publication_year,
+                    journal: paper.primary_location?.source?.display_name || paper.host_venue?.display_name,
+                    external_id: paper.id
                   }} 
                 />
                 
-                {paper.url && (
-                  <Button variant="outline" asChild>
-                    <a href={paper.url} target="_blank" rel="noopener noreferrer">
+                <Button 
+                  onClick={handleSummarizePaper}
+                  variant="outline" 
+                  className="w-full"
+                >
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Summarize this Paper
+                </Button>
+
+                {paper.best_oa_location?.pdf_url && (
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    asChild
+                  >
+                    <a 
+                      href={paper.best_oa_location.pdf_url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download PDF
+                    </a>
+                  </Button>
+                )}
+
+                {paper.open_access?.oa_url && (
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    asChild
+                  >
+                    <a 
+                      href={paper.open_access.oa_url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                    >
                       <ExternalLink className="h-4 w-4 mr-2" />
                       View Original
                     </a>
                   </Button>
                 )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Abstract */}
-          {paper.abstract && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Abstract</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-700 leading-relaxed">
-                  {paper.abstract}
-                </p>
               </CardContent>
             </Card>
-          )}
 
-          {/* External IDs */}
-          {paper.externalIds && Object.keys(paper.externalIds).length > 0 && (
+            {/* Paper Stats */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">External Identifiers</CardTitle>
+                <CardTitle className="text-lg">Paper Statistics</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Citations:</span>
+                  <span className="font-medium">{paper.cited_by_count}</span>
+                </div>
+                
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Authors:</span>
+                  <span className="font-medium">{paper.authors.length}</span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Year:</span>
+                  <span className="font-medium">{paper.publication_year}</span>
+                </div>
+
+                {paper.concepts && paper.concepts.length > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Key Concepts:</span>
+                    <span className="font-medium">{paper.concepts.length}</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Paper ID */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Identifiers</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {paper.externalIds.DOI && (
-                    <Badge variant="outline">
-                      DOI: {paper.externalIds.DOI}
-                    </Badge>
-                  )}
-                  {paper.externalIds.ArXiv && (
-                    <Badge variant="outline">
-                      ArXiv: {paper.externalIds.ArXiv}
-                    </Badge>
-                  )}
-                  {paper.externalIds.PubMed && (
-                    <Badge variant="outline">
-                      PubMed: {paper.externalIds.PubMed}
-                    </Badge>
+                <div className="space-y-2">
+                  <div>
+                    <span className="font-medium text-sm">OpenAlex ID: </span>
+                    <span className="text-gray-600 font-mono text-xs break-all">
+                      {paper.id}
+                    </span>
+                  </div>
+                  {paper.doi && (
+                    <div>
+                      <span className="font-medium text-sm">DOI: </span>
+                      <span className="text-gray-600 text-xs break-all">
+                        {paper.doi.replace('https://doi.org/', '')}
+                      </span>
+                    </div>
                   )}
                 </div>
               </CardContent>
             </Card>
-          )}
-
-          {/* Additional Info */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Publication Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div>
-                <span className="font-medium">Source: </span>
-                <span className="text-gray-600">Semantic Scholar</span>
-              </div>
-              <div>
-                <span className="font-medium">Paper ID: </span>
-                <span className="text-gray-600 font-mono text-sm">{paper.external_id}</span>
-              </div>
-            </CardContent>
-          </Card>
+          </div>
         </div>
       </div>
     </div>
