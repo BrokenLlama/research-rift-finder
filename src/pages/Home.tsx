@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/button';
@@ -14,11 +13,14 @@ import { useSearchHistory } from '@/hooks/useSearchHistory';
 import { openAlexService, OpenAlexFilters, OpenAlexPaper } from '@/services/openAlexService';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import { useNavigate } from 'react-router-dom';
-
 const Home = () => {
-  const { user } = useAuth();
+  const {
+    user
+  } = useAuth();
   const navigate = useNavigate();
-  const { saveSearch } = useSearchHistory();
+  const {
+    saveSearch
+  } = useSearchHistory();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<OpenAlexPaper[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -32,11 +34,9 @@ const Home = () => {
     const lastSearch = localStorage.getItem('lastSearchQuery');
     const lastFilters = localStorage.getItem('lastSearchFilters');
     const lastResults = localStorage.getItem('lastSearchResults');
-    
     if (lastSearch) {
       setSearchQuery(lastSearch);
     }
-    
     if (lastFilters) {
       try {
         setFilters(JSON.parse(lastFilters));
@@ -44,7 +44,6 @@ const Home = () => {
         console.error('Error parsing last search filters:', error);
       }
     }
-    
     if (lastResults) {
       try {
         const parsedResults = JSON.parse(lastResults);
@@ -63,11 +62,9 @@ const Home = () => {
       localStorage.setItem('lastSearchQuery', searchQuery);
     }
   }, [searchQuery]);
-
   useEffect(() => {
     localStorage.setItem('lastSearchFilters', JSON.stringify(filters));
   }, [filters]);
-
   useEffect(() => {
     if (searchResults.length > 0) {
       localStorage.setItem('lastSearchResults', JSON.stringify({
@@ -77,27 +74,18 @@ const Home = () => {
       }));
     }
   }, [searchResults, totalResults, currentPage]);
-
   const handleSearch = async (query?: string, searchFilters?: OpenAlexFilters, page?: number) => {
     const searchTerm = query || searchQuery;
     const searchPage = page || 1;
     const appliedFilters = searchFilters || filters;
-    
     if (!searchTerm.trim()) return;
-
     setIsLoading(true);
     try {
-      const response = await openAlexService.searchPapers(
-        searchTerm,
-        searchPage,
-        perPage,
-        appliedFilters
-      );
-      
+      const response = await openAlexService.searchPapers(searchTerm, searchPage, perPage, appliedFilters);
       setSearchResults(response.results);
       setTotalResults(response.meta.count);
       setCurrentPage(searchPage);
-      
+
       // Save search to history if user is logged in
       if (user) {
         await saveSearch(searchTerm, appliedFilters, response.results.length);
@@ -110,11 +98,9 @@ const Home = () => {
       setIsLoading(false);
     }
   };
-
   const handlePageChange = (page: number) => {
     handleSearch(searchQuery, filters, page);
   };
-
   const handleFiltersChange = (newFilters: OpenAlexFilters) => {
     setFilters(newFilters);
     setCurrentPage(1);
@@ -122,7 +108,6 @@ const Home = () => {
       handleSearch(searchQuery, newFilters, 1);
     }
   };
-
   const handleClearFilters = () => {
     setFilters({});
     setCurrentPage(1);
@@ -130,29 +115,24 @@ const Home = () => {
       handleSearch(searchQuery, {}, 1);
     }
   };
-
   const handleRecentSearchClick = (query: string, searchFilters: any) => {
     setSearchQuery(query);
     setFilters(searchFilters);
     setCurrentPage(1);
     handleSearch(query, searchFilters, 1);
   };
-
   const handlePaperClick = (paper: OpenAlexPaper) => {
     // Navigate to paper details page
     navigate(`/paper/openalex/${encodeURIComponent(paper.id)}`);
   };
-
   const totalPages = Math.ceil(totalResults / perPage);
-
-  return (
-    <div className="min-h-screen bg-gray-50">
+  return <div className="min-h-screen bg-gray-50">
       <Navigation />
       
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
+          <h1 className="font-bold text-gray-900 mb-4 text-4xl">
             Research Paper Discovery
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
@@ -170,17 +150,8 @@ const Home = () => {
           </CardHeader>
           <CardContent>
             <div className="flex space-x-2">
-              <Input
-                placeholder="Enter keywords, topics, or research questions..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                className="flex-1"
-              />
-              <Button 
-                onClick={() => handleSearch()}
-                disabled={isLoading || !searchQuery.trim()}
-              >
+              <Input placeholder="Enter keywords, topics, or research questions..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSearch()} className="flex-1" />
+              <Button onClick={() => handleSearch()} disabled={isLoading || !searchQuery.trim()}>
                 {isLoading ? 'Searching...' : 'Search'}
               </Button>
             </div>
@@ -188,58 +159,40 @@ const Home = () => {
         </Card>
 
         {/* Advanced Filters */}
-        <SearchFilters
-          filters={filters}
-          onFiltersChange={handleFiltersChange}
-          onClearFilters={handleClearFilters}
-        />
+        <SearchFilters filters={filters} onFiltersChange={handleFiltersChange} onClearFilters={handleClearFilters} />
 
         {/* Recent Searches Section - Only show if user is logged in */}
-        {user && (
-          <RecentSearches onSearchSelect={handleRecentSearchClick} />
-        )}
+        {user && <RecentSearches onSearchSelect={handleRecentSearchClick} />}
 
         {/* Search Results */}
-        {searchResults.length > 0 && (
-          <>
+        {searchResults.length > 0 && <>
             <Card>
               <CardHeader>
                 <CardTitle>
                   Search Results ({totalResults.toLocaleString()} papers found)
-                  {currentPage > 1 && (
-                    <span className="text-sm font-normal text-gray-600 ml-2">
+                  {currentPage > 1 && <span className="text-sm font-normal text-gray-600 ml-2">
                       - Page {currentPage} of {totalPages}
-                    </span>
-                  )}
+                    </span>}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-6">
-                  {searchResults.map((paper) => (
-                    <div 
-                      key={paper.id} 
-                      className="border rounded-lg p-6 hover:shadow-md transition-shadow cursor-pointer"
-                      onClick={() => handlePaperClick(paper)}
-                    >
+                  {searchResults.map(paper => <div key={paper.id} className="border rounded-lg p-6 hover:shadow-md transition-shadow cursor-pointer" onClick={() => handlePaperClick(paper)}>
                       <div className="flex justify-between items-start mb-3">
                         <h3 className="text-lg font-semibold text-blue-600 hover:text-blue-800 leading-tight">
                           {paper.title}
                         </h3>
-                        {user && (
-                          <div onClick={(e) => e.stopPropagation()}>
-                            <EnhancedAddToListButton 
-                              paper={{
-                                id: paper.id,
-                                title: paper.title,
-                                authors: paper.authors.map(a => a.display_name),
-                                abstract: paper.abstract,
-                                publication_year: paper.publication_year,
-                                journal: paper.primary_location?.source?.display_name || paper.host_venue?.display_name,
-                                external_id: paper.id
-                              }} 
-                            />
-                          </div>
-                        )}
+                        {user && <div onClick={e => e.stopPropagation()}>
+                            <EnhancedAddToListButton paper={{
+                      id: paper.id,
+                      title: paper.title,
+                      authors: paper.authors.map(a => a.display_name),
+                      abstract: paper.abstract,
+                      publication_year: paper.publication_year,
+                      journal: paper.primary_location?.source?.display_name || paper.host_venue?.display_name,
+                      external_id: paper.id
+                    }} />
+                          </div>}
                       </div>
                       
                       <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 mb-3">
@@ -252,12 +205,10 @@ const Home = () => {
                           <Calendar className="h-4 w-4 mr-1" />
                           {paper.publication_year}
                         </div>
-                        {(paper.primary_location?.source?.display_name || paper.host_venue?.display_name) && (
-                          <div className="flex items-center">
+                        {(paper.primary_location?.source?.display_name || paper.host_venue?.display_name) && <div className="flex items-center">
                             <BookOpen className="h-4 w-4 mr-1" />
                             {paper.primary_location?.source?.display_name || paper.host_venue?.display_name}
-                          </div>
-                        )}
+                          </div>}
                         <div className="flex items-center">
                           <span className="text-xs bg-gray-100 px-2 py-1 rounded">
                             {paper.cited_by_count} citations
@@ -265,130 +216,90 @@ const Home = () => {
                         </div>
                       </div>
                       
-                      {paper.abstract && (
-                        <p className="text-gray-700 mb-3 line-clamp-3">
+                      {paper.abstract && <p className="text-gray-700 mb-3 line-clamp-3">
                           {paper.abstract.substring(0, 300)}
                           {paper.abstract.length > 300 && '...'}
-                        </p>
-                      )}
+                        </p>}
                       
                       <div className="flex flex-wrap gap-2 mb-3">
-                        {paper.concepts?.slice(0, 3).map((concept) => (
-                          <Badge key={concept.display_name} variant="secondary" className="text-xs">
+                        {paper.concepts?.slice(0, 3).map(concept => <Badge key={concept.display_name} variant="secondary" className="text-xs">
                             {concept.display_name}
-                          </Badge>
-                        ))}
-                        {paper.open_access?.is_oa && (
-                          <Badge variant="outline" className="text-green-600 border-green-600">
+                          </Badge>)}
+                        {paper.open_access?.is_oa && <Badge variant="outline" className="text-green-600 border-green-600">
                             Open Access
-                          </Badge>
-                        )}
-                        {paper.best_oa_location?.pdf_url && (
-                          <Badge variant="outline" className="text-blue-600 border-blue-600">
+                          </Badge>}
+                        {paper.best_oa_location?.pdf_url && <Badge variant="outline" className="text-blue-600 border-blue-600">
                             PDF Available
-                          </Badge>
-                        )}
+                          </Badge>}
                       </div>
 
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
-                          {paper.doi && (
-                            <Badge variant="outline" className="text-xs">
+                          {paper.doi && <Badge variant="outline" className="text-xs">
                               DOI: {paper.doi.replace('https://doi.org/', '')}
-                            </Badge>
-                          )}
+                            </Badge>}
                         </div>
                         
                         <div className="flex items-center space-x-2">
-                          {paper.best_oa_location?.pdf_url && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.open(paper.best_oa_location?.pdf_url, '_blank');
-                              }}
-                            >
+                          {paper.best_oa_location?.pdf_url && <Button variant="outline" size="sm" onClick={e => {
+                      e.stopPropagation();
+                      window.open(paper.best_oa_location?.pdf_url, '_blank');
+                    }}>
                               <FileText className="h-4 w-4 mr-1" />
                               View PDF
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handlePaperClick(paper);
-                            }}
-                          >
+                            </Button>}
+                          <Button variant="ghost" size="sm" onClick={e => {
+                      e.stopPropagation();
+                      handlePaperClick(paper);
+                    }}>
                             <ExternalLink className="h-4 w-4 mr-1" />
                             Details
                           </Button>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    </div>)}
                 </div>
               </CardContent>
             </Card>
 
             {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="mt-6 flex justify-center">
+            {totalPages > 1 && <div className="mt-6 flex justify-center">
                 <Pagination>
                   <PaginationContent>
-                    {currentPage > 1 && (
-                      <PaginationItem>
-                        <PaginationPrevious 
-                          onClick={() => handlePageChange(currentPage - 1)}
-                          className="cursor-pointer"
-                        />
-                      </PaginationItem>
-                    )}
+                    {currentPage > 1 && <PaginationItem>
+                        <PaginationPrevious onClick={() => handlePageChange(currentPage - 1)} className="cursor-pointer" />
+                      </PaginationItem>}
                     
-                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      let pageNum;
-                      if (totalPages <= 5) {
-                        pageNum = i + 1;
-                      } else if (currentPage <= 3) {
-                        pageNum = i + 1;
-                      } else if (currentPage >= totalPages - 2) {
-                        pageNum = totalPages - 4 + i;
-                      } else {
-                        pageNum = currentPage - 2 + i;
-                      }
-                      
-                      return (
-                        <PaginationItem key={pageNum}>
-                          <PaginationLink
-                            onClick={() => handlePageChange(pageNum)}
-                            isActive={currentPage === pageNum}
-                            className="cursor-pointer"
-                          >
+                    {Array.from({
+                length: Math.min(5, totalPages)
+              }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+                return <PaginationItem key={pageNum}>
+                          <PaginationLink onClick={() => handlePageChange(pageNum)} isActive={currentPage === pageNum} className="cursor-pointer">
                             {pageNum}
                           </PaginationLink>
-                        </PaginationItem>
-                      );
-                    })}
+                        </PaginationItem>;
+              })}
                     
-                    {currentPage < totalPages && (
-                      <PaginationItem>
-                        <PaginationNext 
-                          onClick={() => handlePageChange(currentPage + 1)}
-                          className="cursor-pointer"
-                        />
-                      </PaginationItem>
-                    )}
+                    {currentPage < totalPages && <PaginationItem>
+                        <PaginationNext onClick={() => handlePageChange(currentPage + 1)} className="cursor-pointer" />
+                      </PaginationItem>}
                   </PaginationContent>
                 </Pagination>
-              </div>
-            )}
-          </>
-        )}
+              </div>}
+          </>}
 
         {/* Features Overview */}
-        {searchResults.length === 0 && !isLoading && (
-          <div className="grid md:grid-cols-3 gap-6 mt-8">
+        {searchResults.length === 0 && !isLoading && <div className="grid md:grid-cols-3 gap-6 mt-8">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
@@ -430,11 +341,8 @@ const Home = () => {
                 </p>
               </CardContent>
             </Card>
-          </div>
-        )}
+          </div>}
       </div>
-    </div>
-  );
+    </div>;
 };
-
 export default Home;
