@@ -65,7 +65,17 @@ const ResearchChat = () => {
         return;
       }
 
-      setPapers(papersData || []);
+      // Cast the papers data to match our interface
+      const typedPapers: Paper[] = (papersData || []).map(paper => ({
+        id: paper.id,
+        title: paper.title,
+        authors: Array.isArray(paper.authors) ? paper.authors as string[] : [],
+        abstract: paper.abstract,
+        publication_year: paper.publication_year,
+        journal: paper.journal,
+        summary: paper.summary,
+      }));
+      setPapers(typedPapers);
 
       // Create or get existing chat session
       const { data: existingSession, error: sessionError } = await supabase
@@ -114,7 +124,14 @@ const ResearchChat = () => {
       if (messagesError) {
         console.error('Error loading messages:', messagesError);
       } else {
-        setMessages(messagesData || []);
+        // Cast the messages data to match our interface
+        const typedMessages: Message[] = (messagesData || []).map(msg => ({
+          id: msg.id,
+          role: (msg.role === 'user' || msg.role === 'assistant') ? msg.role : 'user',
+          content: msg.content,
+          created_at: msg.created_at || new Date().toISOString(),
+        }));
+        setMessages(typedMessages);
       }
 
     } catch (error) {
@@ -146,11 +163,19 @@ const ResearchChat = () => {
         throw saveError;
       }
 
+      // Cast the saved message to our interface
+      const typedUserMessage: Message = {
+        id: savedMessage.id,
+        role: 'user',
+        content: savedMessage.content,
+        created_at: savedMessage.created_at || new Date().toISOString(),
+      };
+
       // Add user message to UI immediately
-      setMessages(prev => [...prev, savedMessage]);
+      setMessages(prev => [...prev, typedUserMessage]);
 
       // Prepare messages for API
-      const chatMessages = [...messages, savedMessage].map(msg => ({
+      const chatMessages = [...messages, typedUserMessage].map(msg => ({
         role: msg.role,
         content: msg.content
       }));
@@ -184,8 +209,16 @@ const ResearchChat = () => {
         throw assistantError;
       }
 
+      // Cast the assistant message to our interface
+      const typedAssistantMessage: Message = {
+        id: assistantMessage.id,
+        role: 'assistant',
+        content: assistantMessage.content,
+        created_at: assistantMessage.created_at || new Date().toISOString(),
+      };
+
       // Add assistant message to UI
-      setMessages(prev => [...prev, assistantMessage]);
+      setMessages(prev => [...prev, typedAssistantMessage]);
 
     } catch (error) {
       console.error('Error sending message:', error);

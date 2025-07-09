@@ -75,7 +75,17 @@ const ListDetails = () => {
           variant: "destructive",
         });
       } else {
-        setPapers(papersData || []);
+        // Cast the data to match our interface
+        const typedPapers: Paper[] = (papersData || []).map(paper => ({
+          id: paper.id,
+          title: paper.title,
+          authors: Array.isArray(paper.authors) ? paper.authors as string[] : [],
+          abstract: paper.abstract,
+          publication_year: paper.publication_year,
+          journal: paper.journal,
+          created_at: paper.created_at || new Date().toISOString(),
+        }));
+        setPapers(typedPapers);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
