@@ -47,12 +47,16 @@ export const useChatHistory = (listId?: string) => {
 
       if (error) throw error;
       
-      // Transform the data to match our interface
+      // Transform the data to match our interface with proper type checking
       const transformedData: ChatHistoryEntry[] = (data || []).map(item => ({
         id: item.id,
         list_id: item.list_id,
         title: item.title,
-        messages: Array.isArray(item.messages) ? item.messages as ChatMessage[] : [],
+        messages: Array.isArray(item.messages) 
+          ? (item.messages as unknown as ChatMessage[]).filter(msg => 
+              msg && typeof msg === 'object' && 'role' in msg && 'content' in msg
+            )
+          : [],
         created_at: item.created_at,
         updated_at: item.updated_at,
       }));
@@ -86,7 +90,11 @@ export const useChatHistory = (listId?: string) => {
         id: data.id,
         list_id: data.list_id,
         title: data.title,
-        messages: Array.isArray(data.messages) ? data.messages as ChatMessage[] : [],
+        messages: Array.isArray(data.messages) 
+          ? (data.messages as unknown as ChatMessage[]).filter(msg => 
+              msg && typeof msg === 'object' && 'role' in msg && 'content' in msg
+            )
+          : [],
         created_at: data.created_at,
         updated_at: data.updated_at,
       };
@@ -110,7 +118,7 @@ export const useChatHistory = (listId?: string) => {
       const { error } = await supabase
         .from('chat_history')
         .update({ 
-          messages: messages,
+          messages: messages as unknown as any,
           updated_at: new Date().toISOString()
         })
         .eq('id', chatId);

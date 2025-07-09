@@ -7,8 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Search, BookOpen, Users, Calendar } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { EnhancedAddToListButton } from '@/components/EnhancedAddToListButton';
-import { RecentSearches } from '@/components/RecentSearches';
+import EnhancedAddToListButton from '@/components/EnhancedAddToListButton';
+import RecentSearches from '@/components/RecentSearches';
 import { useSearchHistory } from '@/hooks/useSearchHistory';
 
 // Mock paper search function - replace with actual implementation
