@@ -4,6 +4,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -30,6 +33,9 @@ const AddToListButton = ({ paper }: AddToListButtonProps) => {
   const { toast } = useToast();
   const [lists, setLists] = useState<PaperList[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [newListName, setNewListName] = useState('');
+  const [isCreatingList, setIsCreatingList] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -54,10 +60,50 @@ const AddToListButton = ({ paper }: AddToListButtonProps) => {
     }
   };
 
-  const addToList = async (listId: string, listName: string) => {
+  const createNewListAndAddPaper = async () => {
+    if (!user || !newListName.trim()) return;
+    
+    setIsCreatingList(true);
+    try {
+      // Create the new list
+      const { data: newList, error: createError } = await supabase
+        .from('paper_lists')
+        .insert({
+          name: newListName.trim(),
+          user_id: user.id,
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        throw createError;
+      }
+
+      // Add the paper to the new list
+      await addPaperToList(newList.id, newList.name);
+      
+      // Refresh the lists
+      await fetchLists();
+      
+      // Close dialog
+      setShowCreateDialog(false);
+      setNewListName('');
+      
+    } catch (error) {
+      console.error('Error creating list and adding paper:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create list and add paper.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingList(false);
+    }
+  };
+
+  const addPaperToList = async (listId: string, listName: string) => {
     if (!user) return;
     
-    setIsLoading(true);
     try {
       // Check if paper already exists in this list
       const { data: existingPaper, error: checkError } = await supabase
@@ -112,38 +158,92 @@ const AddToListButton = ({ paper }: AddToListButtonProps) => {
         description: "Failed to add paper to list.",
         variant: "destructive",
       });
-    } finally {
-      setIsLoading(false);
     }
+  };
+
+  const handleAddToList = async (listId: string, listName: string) => {
+    setIsLoading(true);
+    await addPaperToList(listId, listName);
+    setIsLoading(false);
+  };
+
+  const handleCreateNewList = () => {
+    setShowCreateDialog(true);
   };
 
   if (!user) return null;
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button size="sm" disabled={isLoading}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add to List
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent>
-        {lists.length === 0 ? (
-          <DropdownMenuItem disabled>
-            No lists available. Create a list first.
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button size="sm" disabled={isLoading}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add to List
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem onClick={handleCreateNewList}>
+            <Plus className="h-4 w-4 mr-2" />
+            ➕ Create New List
           </DropdownMenuItem>
-        ) : (
-          lists.map((list) => (
-            <DropdownMenuItem
-              key={list.id}
-              onClick={() => addToList(list.id, list.name)}
-            >
-              {list.name}
+          {lists.length === 0 ? (
+            <DropdownMenuItem disabled>
+              No existing lists
             </DropdownMenuItem>
-          ))
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+          ) : (
+            lists.map((list) => (
+              <DropdownMenuItem
+                key={list.id}
+                onClick={() => handleAddToList(list.id, list.name)}
+              >
+                {list.name}
+              </DropdownMenuItem>
+            ))
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New List</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="listName">List Name</Label>
+              <Input
+                id="listName"
+                value={newListName}
+                onChange={(e) => setNewListName(e.target.value)}
+                placeholder="e.g., Climate Change, Machine Learning"
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && newListName.trim()) {
+                    createNewListAndAddPaper();
+                  }
+                }}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={createNewListAndAddPaper}
+                disabled={!newListName.trim() || isCreatingList}
+                className="flex-1"
+              >
+                {isCreatingList ? 'Creating...' : 'Create and Add Paper'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowCreateDialog(false)}
+                disabled={isCreatingList}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 

@@ -1,83 +1,93 @@
 
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { BookOpen, FileText, MessageCircle, List, LogOut } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
+import { Button } from '@/components/ui/button';
+import { BookOpen, List, MessageCircle, LogOut, Home } from 'lucide-react';
 
 const Navigation = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const location = useLocation();
-  const { user, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate('/');
+  };
+
+  const isActive = (path: string) => {
+    return location.pathname === path;
+  };
 
   return (
-    <nav className="bg-white/90 backdrop-blur-sm border-b border-gray-200 px-4 py-3">
-      <div className="container mx-auto flex items-center justify-between">
-        <Link to="/" className="flex items-center">
-          <BookOpen className="h-8 w-8 text-blue-600 mr-2" />
-          <span className="text-xl font-bold text-gray-900">ScholarMate</span>
-        </Link>
-        
-        <div className="flex items-center space-x-2">
-          <Button
-            variant={location.pathname === '/' ? 'default' : 'ghost'}
-            asChild
-          >
-            <Link to="/">
-              <BookOpen className="h-4 w-4 mr-2" />
-              Search
-            </Link>
-          </Button>
-          
-          {user && (
-            <>
-              <Button
-                variant={location.pathname === '/my-lists' || location.pathname.startsWith('/list/') ? 'default' : 'ghost'}
-                asChild
-              >
-                <Link to="/my-lists">
+    <nav className="bg-white shadow-sm border-b">
+      <div className="container mx-auto px-4">
+        <div className="flex items-center justify-between h-16">
+          <div className="flex items-center space-x-8">
+            <div 
+              className="flex items-center cursor-pointer" 
+              onClick={() => navigate('/')}
+            >
+              <BookOpen className="h-8 w-8 text-blue-600 mr-2" />
+              <span className="text-xl font-bold text-gray-900">ScholarMate</span>
+            </div>
+            
+            {user && (
+              <div className="hidden md:flex space-x-4">
+                <Button
+                  variant={isActive('/') ? "default" : "ghost"}
+                  onClick={() => navigate('/')}
+                  className="flex items-center"
+                >
+                  <Home className="h-4 w-4 mr-2" />
+                  Home
+                </Button>
+                <Button
+                  variant={isActive('/my-lists') ? "default" : "ghost"}
+                  onClick={() => navigate('/my-lists')}
+                  className="flex items-center"
+                >
                   <List className="h-4 w-4 mr-2" />
                   My Lists
-                </Link>
-              </Button>
-              
-              <Button
-                variant={location.pathname === '/saved-papers' ? 'default' : 'ghost'}
-                asChild
-              >
-                <Link to="/saved-papers">
-                  <FileText className="h-4 w-4 mr-2" />
-                  Saved Papers
-                </Link>
-              </Button>
-              
-              <Button
-                variant={location.pathname === '/research-chat' ? 'default' : 'ghost'}
-                asChild
-              >
-                <Link to="/research-chat">
+                </Button>
+                <Button
+                  variant={isActive('/research-chat') ? "default" : "ghost"}
+                  onClick={() => navigate('/research-chat')}
+                  className="flex items-center"
+                >
                   <MessageCircle className="h-4 w-4 mr-2" />
                   Research Chat
-                </Link>
-              </Button>
+                </Button>
+              </div>
+            )}
+          </div>
 
+          <div className="flex items-center space-x-4">
+            {user ? (
+              <div className="flex items-center space-x-4">
+                <span className="text-sm text-gray-700 hidden sm:block">
+                  Welcome, {user.user_metadata?.full_name || user.email}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSignOut}
+                  className="flex items-center"
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign Out
+                </Button>
+              </div>
+            ) : (
               <Button
-                variant="ghost"
-                onClick={signOut}
-                className="text-red-600 hover:text-red-800"
+                onClick={() => navigate('/auth')}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
               >
-                <LogOut className="h-4 w-4 mr-2" />
-                Sign Out
-              </Button>
-            </>
-          )}
-          
-          {!user && (
-            <Button asChild>
-              <Link to="/auth">
                 Sign In
-              </Link>
-            </Button>
-          )}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </nav>
