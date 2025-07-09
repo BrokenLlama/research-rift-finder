@@ -8,9 +8,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Send, Bot, User } from 'lucide-react';
+import { Send, Bot, User, MessageCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import ChatHistorySidebar from '@/components/ChatHistorySidebar';
+import PlagiarismChecker from '@/components/PlagiarismChecker';
 import { useChatHistory } from '@/hooks/useChatHistory';
 
 interface Message {
@@ -43,14 +44,15 @@ const ResearchChat = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [papers, setPapers] = useState<Paper[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [showPlagiarismChecker, setShowPlagiarismChecker] = useState(false);
   
-  const { currentChat, createNewChat, updateChatMessages } = useChatHistory(listId || undefined);
+  const { currentChat, createNewChat, updateChatMessages, chatHistory } = useChatHistory(listId || undefined);
 
   useEffect(() => {
     if (user && listId) {
       initializeChat();
     }
-  }, [user, listId]);
+  }, [user, listId, currentChat]);
 
   const initializeChat = async () => {
     try {
@@ -69,7 +71,6 @@ const ResearchChat = () => {
         return;
       }
 
-      // Cast the papers data to match our interface
       const typedPapers: Paper[] = (papersData || []).map(paper => ({
         id: paper.id,
         title: paper.title,
@@ -82,60 +83,72 @@ const ResearchChat = () => {
       setPapers(typedPapers);
 
       // Create or get existing chat session
-      const { data: existingSession, error: sessionError } = await supabase
-        .from('chat_sessions')
-        .select('id')
-        .eq('user_id', user?.id)
-        .eq('list_id', listId)
-        .single();
-
-      let currentSessionId;
-
-      if (existingSession) {
-        currentSessionId = existingSession.id;
-      } else {
-        const { data: newSession, error: createError } = await supabase
+      let currentSessionId = sessionId;
+      
+      if (!currentSessionId) {
+        const { data: existingSession, error: sessionError } = await supabase
           .from('chat_sessions')
-          .insert({
-            user_id: user?.id,
-            list_id: listId,
-            name: `Chat with ${listName || 'Papers'}`,
-          })
           .select('id')
-          .single();
+          .eq('user_id', user?.id)
+          .eq('list_id', listId)
+          .maybeSingle();
 
-        if (createError) {
-          toast({
-            title: "Error",
-            description: "Failed to create chat session.",
-            variant: "destructive",
-          });
-          return;
+        if (existingSession) {
+          currentSessionId = existingSession.id;
+        } else {
+          const { data: newSession, error: createError } = await supabase
+            .from('chat_sessions')
+            .insert({
+              user_id: user?.id,
+              list_id: listId,
+              name: `Chat with ${listName || 'Papers'}`,
+            })
+            .select('id')
+            .single();
+
+          if (createError) {
+            toast({
+              title: "Error",
+              description: "Failed to create chat session.",
+              variant: "destructive",
+            });
+            return;
+          }
+
+          currentSessionId = newSession.id;
         }
 
-        currentSessionId = newSession.id;
+        setSessionId(currentSessionId);
       }
 
-      setSessionId(currentSessionId);
-
-      // Load existing messages
-      const { data: messagesData, error: messagesError } = await supabase
-        .from('chat_messages')
-        .select('*')
-        .eq('session_id', currentSessionId)
-        .order('created_at', { ascending: true });
-
-      if (messagesError) {
-        console.error('Error loading messages:', messagesError);
-      } else {
-        // Cast the messages data to match our interface
-        const typedMessages: Message[] = (messagesData || []).map(msg => ({
-          id: msg.id,
-          role: (msg.role === 'user' || msg.role === 'assistant') ? msg.role : 'user',
+      // Load existing messages if we have a current chat
+      if (currentChat && currentChat.messages) {
+        const chatMessages: Message[] = currentChat.messages.map((msg, index) => ({
+          id: `msg-${index}`,
+          role: msg.role as 'user' | 'assistant',
           content: msg.content,
-          created_at: msg.created_at || new Date().toISOString(),
+          created_at: new Date().toISOString(),
         }));
-        setMessages(typedMessages);
+        setMessages(chatMessages);
+      } else if (currentSessionId) {
+        // Load messages from chat_messages table
+        const { data: messagesData, error: messagesError } = await supabase
+          .from('chat_messages')
+          .select('*')
+          .eq('session_id', currentSessionId)
+          .order('created_at', { ascending: true });
+
+        if (messagesError) {
+          console.error('Error loading messages:', messagesError);
+        } else {
+          const typedMessages: Message[] = (messagesData || []).map(msg => ({
+            id: msg.id,
+            role: (msg.role === 'user' || msg.role === 'assistant') ? msg.role : 'user',
+            content: msg.content,
+            created_at: msg.created_at || new Date().toISOString(),
+          }));
+          setMessages(typedMessages);
+        }
       }
 
     } catch (error) {
@@ -152,7 +165,7 @@ const ResearchChat = () => {
     setIsLoading(true);
 
     try {
-      // Save user message
+      // Save user message to database
       const { data: savedMessage, error: saveError } = await supabase
         .from('chat_messages')
         .insert({
@@ -174,7 +187,6 @@ const ResearchChat = () => {
         created_at: savedMessage.created_at || new Date().toISOString(),
       };
 
-      // Add user message to UI immediately
       const updatedMessages = [...messages, typedUserMessage];
       setMessages(updatedMessages);
 
@@ -184,7 +196,7 @@ const ResearchChat = () => {
         content: msg.content
       }));
 
-      // Call our Groq edge function instead of OpenRouter
+      // Call Groq edge function
       const response = await supabase.functions.invoke('groq-chat', {
         body: {
           messages: chatMessages,
@@ -220,11 +232,10 @@ const ResearchChat = () => {
         created_at: assistantMessage.created_at || new Date().toISOString(),
       };
 
-      // Add assistant message to UI
       const finalMessages = [...updatedMessages, typedAssistantMessage];
       setMessages(finalMessages);
 
-      // Update chat history
+      // Update chat history in both tables
       if (currentChat) {
         const historyMessages = finalMessages.map(msg => ({
           role: msg.role,
@@ -232,6 +243,15 @@ const ResearchChat = () => {
         }));
         await updateChatMessages(currentChat.id, historyMessages);
       }
+
+      // Also update the session
+      await supabase
+        .from('chat_sessions')
+        .update({ 
+          updated_at: new Date().toISOString(),
+          name: `Chat about ${papers.length} papers`
+        })
+        .eq('id', sessionId);
 
     } catch (error) {
       console.error('Error sending message:', error);
@@ -255,9 +275,28 @@ const ResearchChat = () => {
     setMessages(convertedMessages);
   };
 
-  const handleNewChat = () => {
-    setMessages([]);
-    setNewMessage('');
+  const handleNewChat = async () => {
+    if (!listId || !user) return;
+    
+    // Create a new chat session
+    const { data: newSession, error } = await supabase
+      .from('chat_sessions')
+      .insert({
+        user_id: user.id,
+        list_id: listId,
+        name: `New Chat with ${listName || 'Papers'}`,
+      })
+      .select('id')
+      .single();
+
+    if (!error && newSession) {
+      setSessionId(newSession.id);
+      setMessages([]);
+      setNewMessage('');
+      
+      // Also create in chat_history
+      await createNewChat(listId, `New Chat with ${listName || 'Papers'}`);
+    }
   };
 
   if (!user) {
@@ -281,12 +320,42 @@ const ResearchChat = () => {
               <CardTitle>Research Chat</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-600 mb-4">
-                Select a paper list to start chatting with your research papers.
-              </p>
-              <p className="text-sm text-gray-500">
-                Go to "My Lists" and click "Chat" on any list to start a conversation.
-              </p>
+              <div className="space-y-6">
+                <p className="text-gray-600 mb-4">
+                  Select a paper list to start chatting with your research papers, or view your chat history below.
+                </p>
+                
+                {/* Show all chat history when no list is selected */}
+                {chatHistory.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4">Your Recent Chats</h3>
+                    <div className="space-y-3">
+                      {chatHistory.map((chat) => (
+                        <Card key={chat.id} className="hover:shadow-md transition-shadow cursor-pointer">
+                          <CardContent className="p-4">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <h4 className="font-medium">{chat.title}</h4>
+                                <p className="text-sm text-gray-500 mt-1">
+                                  {Array.isArray(chat.messages) ? chat.messages.length : 0} messages
+                                </p>
+                                <p className="text-xs text-gray-400 mt-1">
+                                  Updated: {new Date(chat.updated_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                              <MessageCircle className="h-5 w-5 text-gray-400" />
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                <p className="text-sm text-gray-500">
+                  Go to "My Lists" and click "Chat" on any list to start a conversation.
+                </p>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -313,13 +382,29 @@ const ResearchChat = () => {
           <div className="lg:col-span-3">
             <Card className="h-full flex flex-col">
               <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Bot className="h-5 w-5 mr-2 text-blue-600" />
-                  Chat with {listName || 'Your Papers'} ({papers.length} papers) - Powered by Groq
+                <CardTitle className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <Bot className="h-5 w-5 mr-2 text-blue-600" />
+                    Chat with {listName || 'Your Papers'} ({papers.length} papers) - Powered by Groq
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowPlagiarismChecker(!showPlagiarismChecker)}
+                  >
+                    Plagiarism Checker
+                  </Button>
                 </CardTitle>
               </CardHeader>
               
               <CardContent className="flex-1 flex flex-col">
+                {/* Plagiarism Checker */}
+                {showPlagiarismChecker && (
+                  <div className="mb-4">
+                    <PlagiarismChecker />
+                  </div>
+                )}
+
                 <ScrollArea className="flex-1 pr-4 mb-4">
                   <div className="space-y-4">
                     {messages.length === 0 && (
