@@ -94,8 +94,22 @@ const Home = () => {
     }
   };
 
-  const updateFilter = (key: keyof SearchFilters, value: any) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
+  const updateYearRangeFilter = (field: 'from' | 'to', value: string) => {
+    const numValue = parseInt(value) || undefined;
+    setFilters(prev => ({
+      ...prev,
+      yearRange: {
+        ...prev.yearRange,
+        [field]: numValue
+      }
+    }));
+  };
+
+  const updateStringFilter = (key: 'author' | 'fieldOfStudy', value: string) => {
+    setFilters(prev => ({
+      ...prev,
+      [key]: value || undefined
+    }));
   };
 
   return (
@@ -190,20 +204,14 @@ const Home = () => {
                           type="number"
                           placeholder="From"
                           value={filters.yearRange?.from || ''}
-                          onChange={(e) => updateFilter('yearRange', {
-                            ...filters.yearRange,
-                            from: parseInt(e.target.value) || undefined
-                          })}
+                          onChange={(e) => updateYearRangeFilter('from', e.target.value)}
                           className="h-9"
                         />
                         <Input
                           type="number"
                           placeholder="To"
                           value={filters.yearRange?.to || ''}
-                          onChange={(e) => updateFilter('yearRange', {
-                            ...filters.yearRange,
-                            to: parseInt(e.target.value) || undefined
-                          })}
+                          onChange={(e) => updateYearRangeFilter('to', e.target.value)}
                           className="h-9"
                         />
                       </div>
@@ -216,7 +224,7 @@ const Home = () => {
                       <Input
                         placeholder="e.g., John Smith"
                         value={filters.author || ''}
-                        onChange={(e) => updateFilter('author', e.target.value)}
+                        onChange={(e) => updateStringFilter('author', e.target.value)}
                         className="h-9"
                       />
                     </div>
@@ -228,7 +236,7 @@ const Home = () => {
                       <Input
                         placeholder="e.g., Computer Science"
                         value={filters.fieldOfStudy || ''}
-                        onChange={(e) => updateFilter('fieldOfStudy', e.target.value)}
+                        onChange={(e) => updateStringFilter('fieldOfStudy', e.target.value)}
                         className="h-9"
                       />
                     </div>
