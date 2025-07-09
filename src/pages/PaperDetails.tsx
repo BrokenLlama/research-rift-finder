@@ -10,16 +10,18 @@ import AddToListButton from '@/components/AddToListButton';
 
 interface PaperDetailsData {
   title: string;
-  authors: Array<{ display_name: string }>;
-  publication_year: number;
+  authors: Array<{ name: string }>;
+  year: number;
   journal?: string;
   abstract?: string;
   external_id: string;
-  source: 'openalex' | 'semantic_scholar';
-  citations_count?: number;
-  doi?: string;
+  source: string;
   url?: string;
-  keywords?: string[];
+  externalIds?: {
+    DOI?: string;
+    ArXiv?: string;
+    PubMed?: string;
+  };
 }
 
 const PaperDetails = () => {
@@ -40,23 +42,26 @@ const PaperDetails = () => {
     setError(null);
     
     try {
-      // Mock data for demonstration - in a real app, you'd fetch from your API services
+      // For now, using mock data since we'd need to implement individual paper fetching
+      // In a real implementation, you'd fetch from Semantic Scholar API with specific paper ID
       const mockPaper: PaperDetailsData = {
-        title: "Climate Change Impact on Global Biodiversity: A Comprehensive Analysis",
+        title: "Machine Learning Applications in Climate Change Research: A Comprehensive Survey",
         authors: [
-          { display_name: "Dr. Jane Smith" },
-          { display_name: "Prof. Michael Johnson" },
-          { display_name: "Dr. Sarah Chen" }
+          { name: "Dr. Jane Smith" },
+          { name: "Prof. Michael Johnson" },
+          { name: "Dr. Sarah Chen" },
+          { name: "Dr. Robert Williams" }
         ],
-        publication_year: 2023,
+        year: 2024,
         journal: "Nature Climate Change",
-        abstract: "This comprehensive study examines the multifaceted impacts of climate change on global biodiversity patterns. Through analysis of longitudinal data spanning three decades, we identify critical thresholds and tipping points in ecosystem responses to temperature and precipitation changes. Our findings reveal accelerated species migration patterns, altered phenological cycles, and increasing extinction risks in vulnerable habitats. The research highlights the urgent need for adaptive conservation strategies and international cooperation to mitigate biodiversity loss in the face of ongoing climate change.",
+        abstract: "This comprehensive survey examines the rapidly growing field of machine learning applications in climate change research. We analyze over 500 recent publications to identify key trends, methodologies, and breakthrough applications. Our findings reveal significant advances in climate modeling, extreme weather prediction, and carbon footprint analysis using deep learning techniques. The survey covers supervised and unsupervised learning approaches, neural networks, and ensemble methods applied to various climate datasets. We also discuss challenges such as data quality, model interpretability, and computational requirements. The review concludes with recommendations for future research directions and potential policy implications of ML-driven climate science.",
         external_id: paperId as string,
-        source: source as 'openalex' | 'semantic_scholar',
-        citations_count: 142,
-        doi: "10.1038/s41558-023-01234-5",
+        source: source as string,
         url: "https://example.com/paper",
-        keywords: ["Climate Change", "Biodiversity", "Conservation", "Ecosystem", "Species Migration"]
+        externalIds: {
+          DOI: "10.1038/s41558-2024-01234-5",
+          ArXiv: "2024.12345"
+        }
       };
       
       setPaper(mockPaper);
@@ -112,7 +117,7 @@ const PaperDetails = () => {
             Back
           </Button>
           <Badge variant="secondary" className="ml-auto">
-            {paper.source === 'openalex' ? 'OpenAlex' : 'Semantic Scholar'}
+            Semantic Scholar
           </Badge>
         </div>
 
@@ -122,19 +127,31 @@ const PaperDetails = () => {
           <Card>
             <CardHeader>
               <CardTitle className="text-2xl leading-tight">
-                {paper.title}
+                {paper.url ? (
+                  <a 
+                    href={paper.url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="hover:text-blue-600 transition-colors inline-flex items-center gap-2"
+                  >
+                    {paper.title}
+                    <ExternalLink className="h-5 w-5" />
+                  </a>
+                ) : (
+                  paper.title
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-wrap gap-4 text-sm text-gray-600">
                 <div className="flex items-center">
                   <Users className="h-4 w-4 mr-2" />
-                  <span>{paper.authors.map(a => a.display_name).join(', ')}</span>
+                  <span>{paper.authors.map(a => a.name).join(', ')}</span>
                 </div>
                 
                 <div className="flex items-center">
                   <Calendar className="h-4 w-4 mr-2" />
-                  <span>{paper.publication_year}</span>
+                  <span>{paper.year}</span>
                 </div>
                 
                 {paper.journal && (
@@ -143,22 +160,15 @@ const PaperDetails = () => {
                     <span>{paper.journal}</span>
                   </div>
                 )}
-
-                {paper.citations_count && (
-                  <div className="flex items-center">
-                    <Quote className="h-4 w-4 mr-2" />
-                    <span>{paper.citations_count} citations</span>
-                  </div>
-                )}
               </div>
 
               <div className="flex gap-2">
                 <AddToListButton 
                   paper={{
                     title: paper.title,
-                    authors: paper.authors.map(a => a.display_name),
+                    authors: paper.authors.map(a => a.name),
                     abstract: paper.abstract,
-                    publication_year: paper.publication_year,
+                    publication_year: paper.year,
                     journal: paper.journal,
                     external_id: paper.external_id
                   }} 
@@ -190,19 +200,29 @@ const PaperDetails = () => {
             </Card>
           )}
 
-          {/* Keywords */}
-          {paper.keywords && paper.keywords.length > 0 && (
+          {/* External IDs */}
+          {paper.externalIds && Object.keys(paper.externalIds).length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Keywords</CardTitle>
+                <CardTitle className="text-lg">External Identifiers</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-2">
-                  {paper.keywords.map((keyword, index) => (
-                    <Badge key={index} variant="outline">
-                      {keyword}
+                  {paper.externalIds.DOI && (
+                    <Badge variant="outline">
+                      DOI: {paper.externalIds.DOI}
                     </Badge>
-                  ))}
+                  )}
+                  {paper.externalIds.ArXiv && (
+                    <Badge variant="outline">
+                      ArXiv: {paper.externalIds.ArXiv}
+                    </Badge>
+                  )}
+                  {paper.externalIds.PubMed && (
+                    <Badge variant="outline">
+                      PubMed: {paper.externalIds.PubMed}
+                    </Badge>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -214,17 +234,9 @@ const PaperDetails = () => {
               <CardTitle className="text-lg">Publication Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {paper.doi && (
-                <div>
-                  <span className="font-medium">DOI: </span>
-                  <span className="text-gray-600">{paper.doi}</span>
-                </div>
-              )}
               <div>
                 <span className="font-medium">Source: </span>
-                <span className="text-gray-600">
-                  {paper.source === 'openalex' ? 'OpenAlex' : 'Semantic Scholar'}
-                </span>
+                <span className="text-gray-600">Semantic Scholar</span>
               </div>
               <div>
                 <span className="font-medium">Paper ID: </span>
