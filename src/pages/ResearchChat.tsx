@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -178,8 +179,8 @@ const ResearchChat = () => {
         content: msg.content
       }));
 
-      // Call our Gemini edge function
-      const response = await supabase.functions.invoke('gemini-chat', {
+      // Call our OpenRouter edge function
+      const response = await supabase.functions.invoke('openrouter-chat', {
         body: {
           messages: chatMessages,
           papers: papers,
