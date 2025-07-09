@@ -14,6 +14,44 @@ export type Database = {
   }
   public: {
     Tables: {
+      chat_history: {
+        Row: {
+          created_at: string
+          id: string
+          list_id: string
+          messages: Json
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          list_id: string
+          messages?: Json
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          list_id?: string
+          messages?: Json
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_history_list_id_fkey"
+            columns: ["list_id"]
+            isOneToOne: false
+            referencedRelation: "paper_lists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_messages: {
         Row: {
           content: string
@@ -176,6 +214,33 @@ export type Database = {
           full_name?: string | null
           id?: string
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      search_history: {
+        Row: {
+          created_at: string
+          filters_applied: Json | null
+          id: string
+          results_count: number | null
+          search_query: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          filters_applied?: Json | null
+          id?: string
+          results_count?: number | null
+          search_query: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          filters_applied?: Json | null
+          id?: string
+          results_count?: number | null
+          search_query?: string
+          user_id?: string
         }
         Relationships: []
       }

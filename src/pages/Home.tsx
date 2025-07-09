@@ -1,357 +1,236 @@
 
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Search, Filter, Calendar, Users, FileText, Eye, ExternalLink } from 'lucide-react';
-import Navigation from '@/components/Navigation';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import AddToListButton from '@/components/AddToListButton';
-import { semanticScholarService, PaperResult } from '@/services/paperSearch';
+import { Search, ExternalLink } from 'lucide-react';
+import { searchPapers } from '@/services/paperSearch';
+import EnhancedAddToListButton from '@/components/EnhancedAddToListButton';
+import RecentSearches from '@/components/RecentSearches';
+import { useSearchHistory } from '@/hooks/useSearchHistory';
+import { useAuth } from '@/hooks/useAuth';
 
-interface SearchFilters {
-  query: string;
-  year_from: string;
-  year_to: string;
-  author: string;
-  sort: 'relevance' | 'citation_count' | 'publication_date';
+interface Paper {
+  id: string;
+  title: string;
+  authors: string[];
+  abstract?: string;
+  publication_year?: number;
+  journal?: string;
+  url?: string;
 }
 
 const Home = () => {
-  const navigate = useNavigate();
-  const [papers, setPapers] = useState<PaperResult[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
-  const [paginationOffset, setPaginationOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
-  const [totalResults, setTotalResults] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<SearchFilters>({
-    query: '',
-    year_from: '',
-    year_to: '',
-    author: '',
-    sort: 'relevance'
-  });
+  const { user } = useAuth();
+  const { saveSearch } = useSearchHistory();
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<Paper[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
 
-  const updateStringFilter = (key: keyof SearchFilters, value: string) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
-  };
-
-  const handleSearch = async (resetResults: boolean = true) => {
-    if (!filters.query.trim()) {
-      setError('Please enter a search term');
-      return;
+  // Load search state from localStorage on component mount
+  useEffect(() => {
+    const savedSearch = localStorage.getItem('lastSearch');
+    if (savedSearch) {
+      try {
+        const { query: savedQuery, results: savedResults } = JSON.parse(savedSearch);
+        if (savedQuery && savedResults) {
+          setQuery(savedQuery);
+          setResults(savedResults);
+          setHasSearched(true);
+        }
+      } catch (error) {
+        console.error('Error loading saved search:', error);
+      }
     }
+  }, []);
 
-    setIsLoading(true);
-    setError(null);
+  // Save search state to localStorage whenever results change
+  useEffect(() => {
+    if (hasSearched && query && results.length > 0) {
+      localStorage.setItem('lastSearch', JSON.stringify({ query, results }));
+    }
+  }, [query, results, hasSearched]);
+
+  const handleSearch = async (searchQuery: string = query, filters: any = {}) => {
+    if (!searchQuery.trim()) return;
+
+    setLoading(true);
+    setHasSearched(true);
     
-    const searchOffset = resetResults ? 0 : paginationOffset;
-    
+    // Update query if different from current
+    if (searchQuery !== query) {
+      setQuery(searchQuery);
+    }
+
     try {
-      const searchFilters = {
-        ...(filters.year_from && filters.year_to && {
-          yearRange: {
-            from: parseInt(filters.year_from),
-            to: parseInt(filters.year_to)
-          }
-        }),
-        ...(filters.author && { author: filters.author })
-      };
-
-      const response = await semanticScholarService.search(
-        filters.query,
-        searchOffset,
-        20,
-        searchFilters
-      );
-
-      if (resetResults) {
-        setPapers(response.results);
-        setPaginationOffset(20);
-      } else {
-        setPapers(prev => [...prev, ...response.results]);
-        setPaginationOffset(prev => prev + 20);
-      }
+      const searchResults = await searchPapers(searchQuery);
+      setResults(searchResults);
       
-      setHasMore(response.hasMore);
-      setTotalResults(response.total);
-      
-      if (response.results.length === 0 && resetResults) {
-        setError('No papers found for your search.');
+      // Save search to history if user is logged in
+      if (user) {
+        await saveSearch(searchQuery, filters, searchResults.length);
       }
-    } catch (err) {
-      console.error('Search error:', err);
-      setError('Something went wrong. Please try again later.');
-      if (resetResults) {
-        setPapers([]);
-      }
+    } catch (error) {
+      console.error('Search error:', error);
+      setResults([]);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const handleLoadMore = async () => {
-    setIsLoadingMore(true);
-    try {
-      await handleSearch(false);
-    } finally {
-      setIsLoadingMore(false);
-    }
-  };
-
-  const resetFilters = () => {
-    setFilters({
-      query: '',
-      year_from: '',
-      year_to: '',
-      author: '',
-      sort: 'relevance'
-    });
-    setPapers([]);
-    setPaginationOffset(0);
-    setHasMore(false);
-    setTotalResults(0);
-    setError(null);
-  };
-
-  const handleViewDetails = (paper: PaperResult) => {
-    navigate(`/paper/semantic_scholar/${paper.id}`);
-  };
-
-  const formatAuthors = (authors: Array<{ name: string }>) => {
-    if (authors.length <= 3) {
-      return authors.map(a => a.name).join(', ');
-    }
-    return authors.slice(0, 3).map(a => a.name).join(', ') + ' et al.';
-  };
-
-  const truncateAbstract = (abstract: string | undefined, limit: number = 250) => {
-    if (!abstract) return '';
-    return abstract.length > limit ? abstract.substring(0, limit) + '...' : abstract;
+  const handleSearchSelect = (selectedQuery: string, filters: any) => {
+    handleSearch(selectedQuery, filters);
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navigation />
-      
       <div className="container mx-auto px-4 py-8">
-        <div className="max-w-6xl mx-auto">
-          {/* Header */}
+        <div className="max-w-4xl mx-auto">
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold text-gray-900 mb-4">
-              ScholarMate Research Hub
+              Research Paper Search
             </h1>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Discover, organize, and chat with academic papers from Semantic Scholar
+            <p className="text-xl text-gray-600">
+              Discover and organize academic papers with AI-powered insights
             </p>
           </div>
 
-          {/* Search Section */}
-          <Card className="mb-8">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Search className="h-5 w-5 mr-2" />
-                Search Academic Papers
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Enter keywords, topics, or paper titles..."
-                  value={filters.query}
-                  onChange={(e) => updateStringFilter('query', e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                  className="flex-1"
-                />
-                <Button onClick={() => setShowFilters(!showFilters)} variant="outline">
-                  <Filter className="h-4 w-4 mr-2" />
-                  Filters
-                </Button>
-                <Button onClick={() => handleSearch()} disabled={isLoading}>
-                  {isLoading ? 'Searching...' : 'Search'}
-                </Button>
-              </div>
+          <div className="mb-8">
+            <div className="flex space-x-2">
+              <Input
+                type="text"
+                placeholder="Search for research papers..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                className="flex-1"
+              />
+              <Button 
+                onClick={() => handleSearch()}
+                disabled={loading || !query.trim()}
+              >
+                <Search className="h-4 w-4 mr-2" />
+                {loading ? 'Searching...' : 'Search'}
+              </Button>
+            </div>
+          </div>
 
-              {/* Advanced Filters */}
-              {showFilters && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Year From</label>
-                    <Input
-                      type="number"
-                      placeholder="e.g., 2020"
-                      value={filters.year_from}
-                      onChange={(e) => updateStringFilter('year_from', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Year To</label>
-                    <Input
-                      type="number"
-                      placeholder="e.g., 2024"
-                      value={filters.year_to}
-                      onChange={(e) => updateStringFilter('year_to', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Author</label>
-                    <Input
-                      placeholder="Author name"
-                      value={filters.author}
-                      onChange={(e) => updateStringFilter('author', e.target.value)}
-                    />
-                  </div>
-                  <div className="md:col-span-2 lg:col-span-1">
-                    <Button variant="outline" onClick={resetFilters} className="w-full">
-                      Clear Results
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Error Message */}
-          {error && (
-            <Card className="mb-8 border-red-200">
-              <CardContent className="p-4">
-                <p className="text-red-600 text-center">{error}</p>
-              </CardContent>
-            </Card>
+          {/* Recent Searches Section - Only show if user is logged in */}
+          {user && (
+            <div className="mb-8">
+              <RecentSearches onSearchSelect={handleSearchSelect} />
+            </div>
           )}
 
-          {/* Results */}
-          <div className="space-y-4">
-            {isLoading ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="mt-4 text-gray-600">Searching for papers...</p>
-              </div>
-            ) : papers.length > 0 ? (
-              <>
-                <div className="flex justify-between items-center">
-                  <h2 className="text-2xl font-semibold text-gray-900">
-                    Search Results ({totalResults.toLocaleString()})
-                  </h2>
+          {/* Search Results */}
+          {hasSearched && (
+            <div className="space-y-4">
+              {loading ? (
+                <div className="space-y-4">
+                  {[...Array(3)].map((_, i) => (
+                    <Card key={i} className="animate-pulse">
+                      <CardContent className="p-6">
+                        <div className="h-6 bg-gray-200 rounded mb-4"></div>
+                        <div className="h-4 bg-gray-200 rounded mb-2"></div>
+                        <div className="h-4 bg-gray-200 rounded mb-2"></div>
+                        <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+                      </CardContent>
+                    </Card>
+                  ))}
                 </div>
-                {papers.map((paper, index) => (
-                  <Card key={`${paper.id}-${index}`} className="hover:shadow-lg transition-shadow">
-                    <CardContent className="p-6">
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex-1">
-                          <div className="flex items-start gap-2 mb-2">
-                            <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2 flex-1">
-                              {paper.url ? (
-                                <a 
-                                  href={paper.url} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="hover:text-blue-600 transition-colors"
-                                >
-                                  {paper.title}
-                                </a>
-                              ) : (
-                                paper.title
-                              )}
-                            </h3>
+              ) : results.length > 0 ? (
+                <>
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-2xl font-semibold">
+                      Search Results ({results.length})
+                    </h2>
+                  </div>
+                  {results.map((paper) => (
+                    <Card key={paper.id} className="hover:shadow-md transition-shadow">
+                      <CardHeader>
+                        <div className="flex justify-between items-start">
+                          <CardTitle className="text-lg leading-tight mb-2">
+                            {paper.title}
+                          </CardTitle>
+                          <div className="flex space-x-2 ml-4">
+                            <EnhancedAddToListButton paper={paper} />
                             {paper.url && (
-                              <ExternalLink className="h-4 w-4 text-gray-400 mt-1 flex-shrink-0" />
-                            )}
-                          </div>
-                          
-                          <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-3">
-                            {paper.authors.length > 0 && (
-                              <div className="flex items-center">
-                                <Users className="h-4 w-4 mr-1 flex-shrink-0" />
-                                <span>{formatAuthors(paper.authors)}</span>
-                              </div>
-                            )}
-                            
-                            <div className="flex items-center">
-                              <Calendar className="h-4 w-4 mr-1" />
-                              <span>{paper.year}</span>
-                            </div>
-                            
-                            {paper.journal && (
-                              <div className="flex items-center">
-                                <FileText className="h-4 w-4 mr-1" />
-                                <span>{paper.journal}</span>
-                              </div>
-                            )}
-                          </div>
-
-                          {paper.abstract && (
-                            <p className="text-gray-700 text-sm line-clamp-3 mb-4">
-                              {truncateAbstract(paper.abstract)}
-                            </p>
-                          )}
-
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2">
-                              <Badge variant="secondary">Semantic Scholar</Badge>
-                              {paper.externalIds?.DOI && (
-                                <Badge variant="outline">DOI</Badge>
-                              )}
-                            </div>
-                            
-                            <div className="flex gap-2">
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => handleViewDetails(paper)}
+                                onClick={() => window.open(paper.url, '_blank')}
                               >
-                                <Eye className="h-4 w-4 mr-1" />
-                                View Details
+                                <ExternalLink className="h-4 w-4 mr-1" />
+                                View
                               </Button>
-                              <AddToListButton 
-                                paper={{
-                                  title: paper.title,
-                                  authors: paper.authors.map(a => a.name),
-                                  abstract: paper.abstract,
-                                  publication_year: paper.year,
-                                  journal: paper.journal,
-                                  external_id: paper.id
-                                }} 
-                              />
-                            </div>
+                            )}
                           </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap gap-2">
+                            {paper.authors.slice(0, 5).map((author, index) => (
+                              <Badge key={index} variant="secondary">
+                                {author}
+                              </Badge>
+                            ))}
+                            {paper.authors.length > 5 && (
+                              <Badge variant="secondary">
+                                +{paper.authors.length - 5} more
+                              </Badge>
+                            )}
+                          </div>
+                          
+                          {paper.abstract && (
+                            <p className="text-gray-700 text-sm leading-relaxed">
+                              {paper.abstract.length > 300
+                                ? `${paper.abstract.slice(0, 300)}...`
+                                : paper.abstract}
+                            </p>
+                          )}
+                          
+                          <div className="flex items-center space-x-4 text-sm text-gray-500">
+                            {paper.publication_year && (
+                              <span>Year: {paper.publication_year}</span>
+                            )}
+                            {paper.journal && (
+                              <span>Journal: {paper.journal}</span>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </>
+              ) : (
+                <Card>
+                  <CardContent className="text-center py-8">
+                    <p className="text-gray-500">
+                      No papers found for "{query}". Try different keywords or check your spelling.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
 
-                {/* Load More Button */}
-                {hasMore && (
-                  <div className="text-center py-6">
-                    <Button
-                      onClick={handleLoadMore}
-                      disabled={isLoadingMore}
-                      variant="outline"
-                      size="lg"
-                    >
-                      {isLoadingMore ? 'Loading...' : 'Load More Papers'}
-                    </Button>
-                  </div>
-                )}
-              </>
-            ) : !isLoading && filters.query.trim() && (
-              <div className="text-center py-12">
-                <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  No papers found
-                </h3>
-                <p className="text-gray-500">
-                  Try adjusting your search terms or filters
+          {!hasSearched && !user && (
+            <Card>
+              <CardContent className="text-center py-12">
+                <Search className="h-16 w-16 mx-auto mb-4 text-gray-400" />
+                <h3 className="text-xl font-semibold mb-2">Start Your Research Journey</h3>
+                <p className="text-gray-600 mb-4">
+                  Search for academic papers and organize them into collections
                 </p>
-              </div>
-            )}
-          </div>
+                <p className="text-sm text-gray-500">
+                  Sign in to save your searches and create paper lists
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>
