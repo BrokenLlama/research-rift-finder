@@ -95,12 +95,12 @@ const Home = () => {
   };
 
   const updateYearRangeFilter = (field: 'from' | 'to', value: string) => {
-    const numValue = parseInt(value) || undefined;
+    const numValue = value ? parseInt(value) : undefined;
     setFilters(prev => ({
       ...prev,
       yearRange: {
-        ...prev.yearRange,
-        [field]: numValue
+        from: field === 'from' ? numValue : prev.yearRange?.from,
+        to: field === 'to' ? numValue : prev.yearRange?.to
       }
     }));
   };
@@ -108,7 +108,7 @@ const Home = () => {
   const updateStringFilter = (key: 'author' | 'fieldOfStudy', value: string) => {
     setFilters(prev => ({
       ...prev,
-      [key]: value || undefined
+      [key]: value.trim() || undefined
     }));
   };
 
@@ -203,14 +203,14 @@ const Home = () => {
                         <Input
                           type="number"
                           placeholder="From"
-                          value={filters.yearRange?.from || ''}
+                          value={filters.yearRange?.from?.toString() || ''}
                           onChange={(e) => updateYearRangeFilter('from', e.target.value)}
                           className="h-9"
                         />
                         <Input
                           type="number"
                           placeholder="To"
-                          value={filters.yearRange?.to || ''}
+                          value={filters.yearRange?.to?.toString() || ''}
                           onChange={(e) => updateYearRangeFilter('to', e.target.value)}
                           className="h-9"
                         />
