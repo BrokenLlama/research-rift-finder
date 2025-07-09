@@ -30,7 +30,7 @@ ${index + 1}. Title: ${paper.title}
     // Prepare messages for API
     const apiMessages = [systemMessage, ...messages]
 
-    // Call Groq API
+    // Call Groq API with updated model
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -38,7 +38,7 @@ ${index + 1}. Title: ${paper.title}
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'mixtral-8x7b-32768', // Using Mixtral-8x7B model
+        model: 'llama3-8b-8192', // Updated to use llama3-8b-8192
         messages: apiMessages,
         temperature: 0.7,
         max_tokens: 1000,
@@ -47,8 +47,33 @@ ${index + 1}. Title: ${paper.title}
 
     if (!response.ok) {
       const errorText = await response.text()
+      let errorMessage = `Groq API error: ${response.status}`
+      
+      try {
+        const errorJson = JSON.parse(errorText)
+        if (errorJson.error?.message) {
+          errorMessage = errorJson.error.message
+        }
+      } catch {
+        // If parsing fails, use the raw error text
+        errorMessage = errorText || errorMessage
+      }
+      
       console.error('Groq API error:', response.status, errorText)
-      throw new Error(`Groq API error: ${response.status}`)
+      
+      return new Response(
+        JSON.stringify({ 
+          error: errorMessage,
+          success: false 
+        }),
+        { 
+          status: response.status,
+          headers: { 
+            ...corsHeaders, 
+            'Content-Type': 'application/json' 
+          } 
+        }
+      )
     }
 
     const data = await response.json()
@@ -71,7 +96,7 @@ ${index + 1}. Title: ${paper.title}
     console.error('Error in groq-chat function:', error)
     return new Response(
       JSON.stringify({ 
-        error: error.message,
+        error: error.message || 'An unexpected error occurred',
         success: false 
       }),
       { 
