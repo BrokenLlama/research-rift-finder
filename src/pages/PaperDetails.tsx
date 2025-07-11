@@ -51,17 +51,17 @@ const PaperDetails = () => {
     // Navigate to summarize page with paper data
     navigate('/summarize', { 
       state: { 
-        paperTitle: paper?.display_name,
+        paperTitle: paper?.title,
         paperAbstract: paper?.abstract,
         paperAuthors: paper?.authors.map(a => a.display_name)
       } 
     });
   };
 
-  const formatAuthors = (authors: Array<{ name: string }>) => {
-    if (authors.length === 0) return 'Unknown authors';
-    if (authors.length <= 3) return authors.map(a => a.name).join(', ');
-    return `${authors.slice(0, 3).map(a => a.name).join(', ')} +${authors.length - 3} more`;
+  const formatAuthors = (authors: Array<{ display_name: string }>) => {
+    if (!authors || authors.length === 0) return 'Unknown authors';
+    if (authors.length <= 3) return authors.map(a => a.display_name).join(', ');
+    return `${authors.slice(0, 3).map(a => a.display_name).join(', ')} +${authors.length - 3} more`;
   };
 
   if (isLoading) {
@@ -142,10 +142,10 @@ const PaperDetails = () => {
                     <span>{paper.publication_year}</span>
                   </div>
                   
-                  {(paper.journal?.display_name || paper.venue) && (
+                  {(paper.primary_location?.source?.display_name || paper.host_venue?.display_name) && (
                     <div className="flex items-center">
                       <BookOpen className="h-4 w-4 mr-2" />
-                      <span>{paper.journal?.display_name || paper.venue}</span>
+                      <span>{paper.primary_location?.source?.display_name || paper.host_venue?.display_name}</span>
                     </div>
                   )}
 
@@ -181,7 +181,7 @@ const PaperDetails = () => {
                   <div className="flex flex-wrap gap-2">
                     {paper.concepts.map((concept) => (
                       <Badge 
-                        key={concept.id} 
+                        key={concept.display_name} 
                         variant="secondary"
                         className="text-sm"
                       >
@@ -210,11 +210,11 @@ const PaperDetails = () => {
                     </span>
                   </div>
                   
-                  {(paper.journal?.display_name || paper.venue) && (
+                  {(paper.primary_location?.source?.display_name || paper.host_venue?.display_name) && (
                     <div>
                       <span className="font-medium">Venue: </span>
                       <span className="text-gray-600">
-                        {paper.journal?.display_name || paper.venue}
+                        {paper.primary_location?.source?.display_name || paper.host_venue?.display_name}
                       </span>
                     </div>
                   )}
@@ -234,7 +234,7 @@ const PaperDetails = () => {
                   </div>
                 )}
 
-                {paper.url && (
+                {/* {paper.url && (
                   <div className="pt-2 border-t">
                     <span className="font-medium">URL: </span>
                     <a 
@@ -246,7 +246,7 @@ const PaperDetails = () => {
                       View Paper
                     </a>
                   </div>
-                )}
+                )} */}
               </CardContent>
             </Card>
           </div>
@@ -262,11 +262,11 @@ const PaperDetails = () => {
                 <EnhancedAddToListButton 
                   paper={{
                     id: paper.id,
-                    title: paper.display_name,
+                    title: paper.title,
                     authors: paper.authors.map(a => a.display_name),
                     abstract: paper.abstract,
                     publication_year: paper.publication_year,
-                    journal: paper.journal?.display_name || paper.venue
+                    journal: paper.primary_location?.source?.display_name || paper.host_venue?.display_name
                   }} 
                 />
                 
@@ -296,7 +296,7 @@ const PaperDetails = () => {
                   </Button>
                 )}
 
-                {paper.url && (
+                {/* {paper.url && (
                   <Button 
                     variant="outline" 
                     className="w-full"
@@ -311,7 +311,7 @@ const PaperDetails = () => {
                       View Original
                     </a>
                   </Button>
-                )}
+                )} */}
               </CardContent>
             </Card>
 

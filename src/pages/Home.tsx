@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, BookOpen, Users, Calendar, ExternalLink, FileText } from 'lucide-react';
+import { Search, BookOpen, Users, Calendar, ExternalLink, FileText, Clock, Trash2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import EnhancedAddToListButton from '@/components/EnhancedAddToListButton';
 import RecentSearches from '@/components/RecentSearches';
@@ -16,13 +16,68 @@ import { useSearchHistory } from '@/hooks/useSearchHistory';
 import { openAlexService, OpenAlexFilters, OpenAlexPaper } from '@/services/openAlexService';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import { useNavigate } from 'react-router-dom';
+import { formatDistanceToNow } from 'date-fns';
+
+// --- Inline Recent Searches List for Dropdown ---
+// Helper function to render recent searches inline
+const InlineRecentSearches = ({ searchHistory, loading, clearSearchHistory, onSearchSelect }: any) => {
+  if (loading) {
+    return (
+      <div className="py-3 px-4">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="h-10 bg-gray-200/60 rounded animate-pulse mb-2" />
+        ))}
+      </div>
+    );
+  }
+  if (!searchHistory || searchHistory.length === 0) {
+    return (
+      <div className="py-3 px-4 text-gray-500 text-sm">No recent searches yet. Start searching to see your history here!</div>
+    );
+  }
+  return (
+    <div className="py-2 px-2">
+      <div className="flex items-center justify-between px-2 pb-2">
+        <div className="flex items-center text-sm font-semibold text-gray-700">
+          <Clock className="h-4 w-4 mr-2" /> Recent Searches
+        </div>
+        <button
+          onClick={clearSearchHistory}
+          className="text-xs text-red-600 hover:text-red-700 flex items-center px-2 py-1 rounded hover:bg-red-50 transition"
+        >
+          <Trash2 className="h-3 w-3 mr-1" /> Clear
+        </button>
+      </div>
+      <div className="space-y-1">
+        {searchHistory.map((search: any) => (
+          <div
+            key={search.id}
+            className="flex items-center justify-between p-2 bg-white/60 hover:bg-blue-50/80 cursor-pointer rounded transition-colors"
+            onClick={() => onSearchSelect(search.search_query, search.filters_applied)}
+          >
+            <div className="flex-1">
+              <p className="font-medium text-xs text-gray-900">{search.search_query}</p>
+              <p className="text-[11px] text-gray-500">
+                {search.results_count} results • {formatDistanceToNow(new Date(search.created_at), { addSuffix: true })}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const Home = () => {
   const {
     user
   } = useAuth();
   const navigate = useNavigate();
   const {
-    saveSearch
+    saveSearch,
+    searchHistory,
+    loading: searchHistoryLoading,
+    clearSearchHistory
   } = useSearchHistory();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<OpenAlexPaper[]>([]);
@@ -31,6 +86,10 @@ const Home = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
   const [perPage] = useState(25);
+  const [searchBarFocused, setSearchBarFocused] = useState(false);
+  const searchBarRef = useRef<HTMLInputElement>(null);
+  const recentSearchesTimeout = useRef<NodeJS.Timeout | null>(null);
+  const recentSearchesContainerRef = useRef<HTMLDivElement>(null);
 
   // Load last search from localStorage on component mount
   useEffect(() => {
@@ -163,6 +222,26 @@ const Home = () => {
     navigate(`/paper/openalex/${encodeURIComponent(paper.id)}`);
   };
   const totalPages = Math.ceil(totalResults / perPage);
+
+  // --- Focus/Blur Handlers for Search Bar ---
+  const handleSearchBarFocus = () => {
+    if (recentSearchesTimeout.current) {
+      clearTimeout(recentSearchesTimeout.current);
+    }
+    setSearchBarFocused(true);
+  };
+  const handleSearchBarBlur = () => {
+    // Delay hiding to allow click on dropdown
+    recentSearchesTimeout.current = setTimeout(() => {
+      setSearchBarFocused(false);
+    }, 120);
+  };
+  // --- Handle click inside RecentSearches to prevent blur ---
+  const handleRecentSearchesMouseDown = (e: React.MouseEvent) => {
+    // Prevent blur when clicking inside the dropdown
+    e.preventDefault();
+  };
+
   return <div className="min-h-screen bg-gray-50">
       <Navigation />
       
@@ -178,7 +257,7 @@ const Home = () => {
         </div>
 
         {/* Search Section */}
-        <Card className="mb-8">
+        <Card className="mb-8 relative">
           <CardHeader>
             <CardTitle className="flex items-center">
               <Search className="h-5 w-5 mr-2" />
@@ -187,7 +266,36 @@ const Home = () => {
           </CardHeader>
           <CardContent>
             <div className="flex space-x-2">
-              <Input placeholder="Enter keywords, topics, or research questions..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSearch()} className="flex-1" />
+              <div className="relative flex-1">
+                <Input
+                  ref={searchBarRef}
+                  placeholder="Enter keywords, topics, or research questions..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  onKeyPress={e => e.key === 'Enter' && handleSearch()}
+                  className="w-full"
+                  onFocus={handleSearchBarFocus}
+                  onBlur={handleSearchBarBlur}
+                  aria-label="Search papers"
+                  autoComplete="off"
+                />
+                {/* Recent Searches Dropdown - perfectly aligned to input */}
+                {user && searchBarFocused && (
+                  <div
+                    ref={recentSearchesContainerRef}
+                    onMouseDown={handleRecentSearchesMouseDown}
+                    className="absolute left-0 top-full z-20 w-full mt-1 rounded-lg shadow-lg border border-gray-200 bg-white/80 backdrop-blur-sm"
+                    style={{ minWidth: '0', maxWidth: '100%' }}
+                  >
+                    <InlineRecentSearches
+                      searchHistory={searchHistory}
+                      loading={searchHistoryLoading}
+                      clearSearchHistory={clearSearchHistory}
+                      onSearchSelect={handleRecentSearchClick}
+                    />
+                  </div>
+                )}
+              </div>
               <Button onClick={() => handleSearch()} disabled={isLoading || !searchQuery.trim()}>
                 {isLoading ? 'Searching...' : 'Search'}
               </Button>
@@ -199,9 +307,6 @@ const Home = () => {
         <ErrorBoundary>
           <SearchFilters filters={filters} onFiltersChange={handleFiltersChange} onClearFilters={handleClearFilters} />
         </ErrorBoundary>
-
-        {/* Recent Searches Section - Only show if user is logged in */}
-        {user && <RecentSearches onSearchSelect={handleRecentSearchClick} />}
 
         {/* Search Results */}
         {searchResults.length > 0 && <>
@@ -234,7 +339,7 @@ const Home = () => {
                         authors: paper.authors.map(a => a.display_name),
                         abstract: paper.abstract,
                         publication_year: paper.publication_year,
-                        journal: paper.journal?.display_name
+                        journal: paper.primary_location?.source?.display_name || paper.host_venue?.display_name || ''
                       }} />
                             </div>}
                         </div>
@@ -244,7 +349,7 @@ const Home = () => {
                           <Users className="h-4 w-4 mr-1" />
                           <span>
                             {paper.authors.slice(0, 3).map((a, index) => (
-                              <span key={a.author_id || index}>
+                              <span key={a.id || index}>
                                 <HighlightedText 
                                   text={a.display_name} 
                                   searchTerms={searchTerms}
@@ -259,10 +364,10 @@ const Home = () => {
                           <Calendar className="h-4 w-4 mr-1" />
                           {paper.publication_year}
                         </div>
-                        {(paper.journal?.display_name || paper.venue) && <div className="flex items-center">
+                        {(paper.primary_location?.source?.display_name || paper.host_venue?.display_name) && <div className="flex items-center">
                             <BookOpen className="h-4 w-4 mr-1" />
                             <HighlightedText 
-                              text={paper.journal?.display_name || paper.venue || ''} 
+                              text={paper.primary_location?.source?.display_name || paper.host_venue?.display_name || ''} 
                               searchTerms={searchTerms}
                             />
                           </div>}
@@ -282,7 +387,7 @@ const Home = () => {
                         </p>}
                       
                       <div className="flex flex-wrap gap-2 mb-3">
-                        {paper.concepts?.slice(0, 3).map(concept => <Badge key={concept.id} variant="secondary" className="text-xs">
+                        {paper.concepts?.slice(0, 3).map(concept => <Badge key={concept.display_name} variant="secondary" className="text-xs">
                             {concept.display_name}
                           </Badge>)}
                         {paper.open_access?.is_oa && <Badge variant="outline" className="text-green-600 border-green-600">

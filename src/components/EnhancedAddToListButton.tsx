@@ -37,6 +37,7 @@ interface Paper {
   abstract?: string;
   publication_year?: number;
   journal?: string;
+  concepts?: any[];
 }
 
 interface EnhancedAddToListButtonProps {
@@ -126,6 +127,8 @@ const EnhancedAddToListButton: React.FC<EnhancedAddToListButtonProps> = ({
           abstract: paper.abstract,
           publication_year: paper.publication_year,
           journal: paper.journal,
+          concepts: paper.concepts || [],
+          external_id: paper.id || null,
         });
 
       if (error) throw error;
@@ -179,6 +182,8 @@ const EnhancedAddToListButton: React.FC<EnhancedAddToListButtonProps> = ({
           abstract: paper.abstract,
           publication_year: paper.publication_year,
           journal: paper.journal,
+          concepts: paper.concepts || [],
+          external_id: paper.id || null,
         });
 
       if (paperError) throw paperError;
