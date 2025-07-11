@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { ChevronDown, ChevronUp, Filter, X } from 'lucide-react';
 import { OpenAlexFilters } from '@/services/openAlexService';
@@ -53,6 +52,16 @@ const SearchFilters: React.FC<SearchFiltersProps> = ({
     (typeof value !== 'object' || Object.keys(value).length > 0)
   );
 
+  const handleFieldSelect = (field: string) => {
+    if (filters.fieldOfStudy === field) {
+      // If same field is clicked, clear it
+      updateFilter('fieldOfStudy', undefined);
+    } else {
+      // Set new field
+      updateFilter('fieldOfStudy', field);
+    }
+  };
+
   return (
     <Card className="mb-6">
       <CardHeader>
@@ -75,7 +84,7 @@ const SearchFilters: React.FC<SearchFiltersProps> = ({
                 className="text-red-600 hover:text-red-700"
               >
                 <X className="h-4 w-4 mr-1" />
-                Clear
+                Clear All
               </Button>
             )}
             <Button
@@ -95,57 +104,59 @@ const SearchFilters: React.FC<SearchFiltersProps> = ({
       
       {isExpanded && (
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="space-y-6">
             {/* Field of Study */}
             <div>
-              <Label htmlFor="fieldOfStudy">Field of Study</Label>
-              <Select
-                value={filters.fieldOfStudy || ''}
-                onValueChange={(value) => updateFilter('fieldOfStudy', value || undefined)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select field..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">All Fields</SelectItem>
-                  {fieldOfStudyOptions.map((field) => (
-                    <SelectItem key={field} value={field}>
-                      {field}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-sm font-medium mb-3 block">Field of Study</Label>
+              <div className="flex flex-wrap gap-2">
+                {fieldOfStudyOptions.map((field) => (
+                  <Button
+                    key={field}
+                    variant={filters.fieldOfStudy === field ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handleFieldSelect(field)}
+                    className="text-xs"
+                  >
+                    {field}
+                  </Button>
+                ))}
+              </div>
             </div>
 
-            {/* Author Name */}
-            <div>
-              <Label htmlFor="author">Author Name</Label>
-              <Input
-                id="author"
-                placeholder="e.g. John Smith"
-                value={filters.author || ''}
-                onChange={(e) => updateFilter('author', e.target.value || undefined)}
-              />
-            </div>
+            {/* Text-based filters */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Author Name */}
+              <div>
+                <Label htmlFor="author" className="text-sm font-medium">Author Name</Label>
+                <Input
+                  id="author"
+                  placeholder="e.g. John Smith"
+                  value={filters.author || ''}
+                  onChange={(e) => updateFilter('author', e.target.value || undefined)}
+                  className="mt-1"
+                />
+              </div>
 
-            {/* Journal/Conference */}
-            <div>
-              <Label htmlFor="journal">Journal/Conference</Label>
-              <Input
-                id="journal"
-                placeholder="e.g. Nature, Science"
-                value={filters.journal || ''}
-                onChange={(e) => updateFilter('journal', e.target.value || undefined)}
-              />
+              {/* Journal/Conference */}
+              <div>
+                <Label htmlFor="journal" className="text-sm font-medium">Journal/Conference</Label>
+                <Input
+                  id="journal"
+                  placeholder="e.g. Nature, Science"
+                  value={filters.journal || ''}
+                  onChange={(e) => updateFilter('journal', e.target.value || undefined)}
+                  className="mt-1"
+                />
+              </div>
             </div>
 
             {/* Year Range */}
-            <div className="md:col-span-2">
-              <Label>Publication Year Range</Label>
-              <div className="flex items-center space-x-2 mt-1">
+            <div>
+              <Label className="text-sm font-medium mb-3 block">Publication Year Range</Label>
+              <div className="flex items-center space-x-2">
                 <Input
                   type="number"
-                  placeholder="From"
+                  placeholder="From year"
                   min="1900"
                   max={currentYear}
                   value={filters.yearRange?.from || ''}
@@ -156,12 +167,12 @@ const SearchFilters: React.FC<SearchFiltersProps> = ({
                       from: isNaN(from) ? undefined : from
                     });
                   }}
-                  className="w-24"
+                  className="w-32"
                 />
-                <span>to</span>
+                <span className="text-gray-500">to</span>
                 <Input
                   type="number"
-                  placeholder="To"
+                  placeholder="To year"
                   min="1900"
                   max={currentYear}
                   value={filters.yearRange?.to || ''}
@@ -172,7 +183,7 @@ const SearchFilters: React.FC<SearchFiltersProps> = ({
                       to: isNaN(to) ? undefined : to
                     });
                   }}
-                  className="w-24"
+                  className="w-32"
                 />
               </div>
             </div>
@@ -184,8 +195,43 @@ const SearchFilters: React.FC<SearchFiltersProps> = ({
                 checked={filters.hasPdf === true}
                 onCheckedChange={(checked) => updateFilter('hasPdf', checked ? true : undefined)}
               />
-              <Label htmlFor="hasPdf">Has Full Text PDF</Label>
+              <Label htmlFor="hasPdf" className="text-sm font-medium">Has Full Text PDF</Label>
             </div>
+
+            {/* Active Filters Summary */}
+            {hasActiveFilters && (
+              <div className="pt-4 border-t">
+                <Label className="text-sm font-medium mb-2 block">Active Filters:</Label>
+                <div className="flex flex-wrap gap-2">
+                  {filters.fieldOfStudy && (
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                      Field: {filters.fieldOfStudy}
+                    </span>
+                  )}
+                  {filters.author && (
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                      Author: {filters.author}
+                    </span>
+                  )}
+                  {filters.journal && (
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                      Journal: {filters.journal}
+                    </span>
+                  )}
+                  {filters.yearRange?.from && (
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                      Year: {filters.yearRange.from}
+                      {filters.yearRange.to && ` - ${filters.yearRange.to}`}
+                    </span>
+                  )}
+                  {filters.hasPdf && (
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                      PDF Available
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </CardContent>
       )}

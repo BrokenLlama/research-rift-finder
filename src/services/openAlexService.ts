@@ -63,6 +63,50 @@ export interface OpenAlexSearchResponse {
 export class OpenAlexService {
   private baseUrl = 'https://api.openalex.org';
 
+  private buildAdvancedSearchQuery(query: string): string {
+    // Clean and normalize the query
+    const cleanQuery = query.trim().toLowerCase();
+    
+    // Split into words and phrases
+    const words = cleanQuery.split(/\s+/).filter(word => word.length > 0);
+    
+    if (words.length === 0) return '';
+    
+    // Build a more sophisticated search query
+    const searchParts: string[] = [];
+    
+    // If it's a single word, search broadly
+    if (words.length === 1) {
+      const word = words[0];
+      searchParts.push(`"${word}"`);
+      searchParts.push(`title.search:"${word}"`);
+      searchParts.push(`abstract.search:"${word}"`);
+    } else {
+      // For multiple words, try different combinations
+      
+      // 1. Exact phrase match (highest priority)
+      searchParts.push(`"${cleanQuery}"`);
+      
+      // 2. All words in title (high priority)
+      const titleSearch = words.map(word => `title.search:"${word}"`).join(',');
+      searchParts.push(`(${titleSearch})`);
+      
+      // 3. All words in abstract (medium priority)
+      const abstractSearch = words.map(word => `abstract.search:"${word}"`).join(',');
+      searchParts.push(`(${abstractSearch})`);
+      
+      // 4. Individual word matches (lower priority)
+      words.forEach(word => {
+        if (word.length > 2) { // Only search for words longer than 2 characters
+          searchParts.push(`"${word}"`);
+        }
+      });
+    }
+    
+    // Combine all search parts with OR operator
+    return searchParts.join(' OR ');
+  }
+
   async searchPapers(
     query: string,
     page: number = 1,
@@ -72,36 +116,54 @@ export class OpenAlexService {
     try {
       const params = new URLSearchParams();
       
-      // Build search query
-      let searchQuery = query;
-      
-      // Add filters to the query
-      if (filters?.author) {
-        searchQuery += ` author.display_name.search:${filters.author}`;
-      }
-      
-      if (filters?.fieldOfStudy) {
-        searchQuery += ` concepts.display_name.search:${filters.fieldOfStudy}`;
-      }
-      
-      if (filters?.journal) {
-        searchQuery += ` primary_location.source.display_name.search:${filters.journal}`;
-      }
+      // Build advanced search query
+      const searchQuery = this.buildAdvancedSearchQuery(query);
+      console.log('Advanced search query:', searchQuery);
       
       params.append('search', searchQuery);
       params.append('page', page.toString());
       params.append('per_page', perPage.toString());
-      params.append('sort', 'cited_by_count:desc');
+      
+      // Use relevance-based sorting instead of just citation count
+      // This will prioritize papers that better match the search terms
+      params.append('sort', 'relevance_score:desc');
+      
+      // Add filters using the filter parameter
+      const filterConditions: string[] = [];
+      
+      // Add author filter
+      if (filters?.author && filters.author.trim()) {
+        filterConditions.push(`authorships.author.display_name.search:"${filters.author.trim()}"`);
+      }
+      
+      // Add field of study filter
+      if (filters?.fieldOfStudy && filters.fieldOfStudy.trim()) {
+        filterConditions.push(`concepts.display_name.search:"${filters.fieldOfStudy.trim()}"`);
+      }
+      
+      // Add journal filter
+      if (filters?.journal && filters.journal.trim()) {
+        filterConditions.push(`primary_location.source.display_name.search:"${filters.journal.trim()}"`);
+      }
       
       // Add year range filter
-      if (filters?.yearRange) {
-        params.append('filter', `publication_year:${filters.yearRange.from}-${filters.yearRange.to}`);
+      if (filters?.yearRange?.from || filters?.yearRange?.to) {
+        const from = filters.yearRange.from || 1900;
+        const to = filters.yearRange.to || new Date().getFullYear();
+        filterConditions.push(`publication_year:${from}-${to}`);
       }
       
       // Add PDF availability filter
       if (filters?.hasPdf !== undefined) {
-        params.append('filter', `has_fulltext:${filters.hasPdf}`);
+        filterConditions.push(`has_fulltext:${filters.hasPdf}`);
       }
+      
+      // Add all filter conditions to the filter parameter
+      if (filterConditions.length > 0) {
+        params.append('filter', filterConditions.join(','));
+      }
+      
+      console.log('OpenAlex API URL:', `${this.baseUrl}/works?${params.toString()}`);
       
       const response = await fetch(`${this.baseUrl}/works?${params.toString()}`);
       

@@ -39,27 +39,39 @@ const MyLists = () => {
 
   const fetchLists = async () => {
     try {
-      const { data, error } = await supabase
+      // First get all lists
+      const { data: listsData, error: listsError } = await supabase
         .from('paper_lists')
-        .select(`
-          *,
-          papers(count)
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) {
+      if (listsError) {
         toast({
           title: "Error",
           description: "Failed to fetch your lists.",
           variant: "destructive",
         });
-      } else {
-        const listsWithCount = data.map(list => ({
-          ...list,
-          paper_count: list.papers?.length || 0
-        }));
-        setLists(listsWithCount);
+        return;
       }
+
+      // Then get paper counts for each list
+      const listsWithCount = await Promise.all(
+        listsData.map(async (list) => {
+          const { count, error: countError } = await supabase
+            .from('papers')
+            .select('*', { count: 'exact', head: true })
+            .eq('list_id', list.id);
+
+          if (countError) {
+            console.error('Error getting count for list:', list.id, countError);
+            return { ...list, paper_count: 0 };
+          }
+
+          return { ...list, paper_count: count || 0 };
+        })
+      );
+
+      setLists(listsWithCount);
     } catch (error) {
       console.error('Error fetching lists:', error);
     } finally {

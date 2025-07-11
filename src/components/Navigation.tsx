@@ -59,6 +59,14 @@ const Navigation = () => {
                   <MessageCircle className="h-4 w-4 mr-2" />
                   Research Chat
                 </Button>
+                <Button
+                  variant={isActive('/upload') ? "default" : "ghost"}
+                  onClick={() => navigate('/upload')}
+                  className="flex items-center"
+                >
+                  <BookOpen className="h-4 w-4 mr-2" />
+                  Upload Paper
+                </Button>
               </div>
             )}
           </div>

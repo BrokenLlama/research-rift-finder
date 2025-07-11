@@ -51,17 +51,17 @@ const PaperDetails = () => {
     // Navigate to summarize page with paper data
     navigate('/summarize', { 
       state: { 
-        paperTitle: paper?.title,
+        paperTitle: paper?.display_name,
         paperAbstract: paper?.abstract,
         paperAuthors: paper?.authors.map(a => a.display_name)
       } 
     });
   };
 
-  const formatAuthors = (authors: Array<{ display_name: string }>) => {
+  const formatAuthors = (authors: Array<{ name: string }>) => {
     if (authors.length === 0) return 'Unknown authors';
-    if (authors.length <= 3) return authors.map(a => a.display_name).join(', ');
-    return `${authors.slice(0, 3).map(a => a.display_name).join(', ')} +${authors.length - 3} more`;
+    if (authors.length <= 3) return authors.map(a => a.name).join(', ');
+    return `${authors.slice(0, 3).map(a => a.name).join(', ')} +${authors.length - 3} more`;
   };
 
   if (isLoading) {
@@ -114,7 +114,7 @@ const PaperDetails = () => {
                 Open Access
               </Badge>
             )}
-            {paper.best_oa_location?.pdf_url && (
+            {paper.open_access?.is_oa && (
               <Badge variant="outline" className="text-blue-600 border-blue-600">
                 PDF Available
               </Badge>
@@ -142,10 +142,10 @@ const PaperDetails = () => {
                     <span>{paper.publication_year}</span>
                   </div>
                   
-                  {(paper.primary_location?.source?.display_name || paper.host_venue?.display_name) && (
+                  {(paper.journal?.display_name || paper.venue) && (
                     <div className="flex items-center">
                       <BookOpen className="h-4 w-4 mr-2" />
-                      <span>{paper.primary_location?.source?.display_name || paper.host_venue?.display_name}</span>
+                      <span>{paper.journal?.display_name || paper.venue}</span>
                     </div>
                   )}
 
@@ -171,17 +171,17 @@ const PaperDetails = () => {
               </Card>
             )}
 
-            {/* Concepts/Keywords */}
+            {/* Topics/Keywords */}
             {paper.concepts && paper.concepts.length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Key Concepts</CardTitle>
+                  <CardTitle className="text-lg">Key Topics</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-2">
                     {paper.concepts.map((concept) => (
                       <Badge 
-                        key={concept.display_name} 
+                        key={concept.id} 
                         variant="secondary"
                         className="text-sm"
                       >
@@ -210,38 +210,11 @@ const PaperDetails = () => {
                     </span>
                   </div>
                   
-                  {paper.primary_location?.source?.type && (
+                  {(paper.journal?.display_name || paper.venue) && (
                     <div>
-                      <span className="font-medium">Source Type: </span>
+                      <span className="font-medium">Venue: </span>
                       <span className="text-gray-600">
-                        {paper.primary_location.source.type}
-                      </span>
-                    </div>
-                  )}
-
-                  {paper.biblio?.volume && (
-                    <div>
-                      <span className="font-medium">Volume: </span>
-                      <span className="text-gray-600">{paper.biblio.volume}</span>
-                    </div>
-                  )}
-
-                  {paper.biblio?.issue && (
-                    <div>
-                      <span className="font-medium">Issue: </span>
-                      <span className="text-gray-600">{paper.biblio.issue}</span>
-                    </div>
-                  )}
-
-                  {(paper.biblio?.first_page || paper.biblio?.last_page) && (
-                    <div>
-                      <span className="font-medium">Pages: </span>
-                      <span className="text-gray-600">
-                        {paper.biblio.first_page}
-                        {paper.biblio.last_page && paper.biblio.first_page !== paper.biblio.last_page 
-                          ? `-${paper.biblio.last_page}` 
-                          : ''
-                        }
+                        {paper.journal?.display_name || paper.venue}
                       </span>
                     </div>
                   )}
@@ -260,6 +233,20 @@ const PaperDetails = () => {
                     </a>
                   </div>
                 )}
+
+                {paper.url && (
+                  <div className="pt-2 border-t">
+                    <span className="font-medium">URL: </span>
+                    <a 
+                      href={paper.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 underline"
+                    >
+                      View Paper
+                    </a>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -275,12 +262,11 @@ const PaperDetails = () => {
                 <EnhancedAddToListButton 
                   paper={{
                     id: paper.id,
-                    title: paper.title,
+                    title: paper.display_name,
                     authors: paper.authors.map(a => a.display_name),
                     abstract: paper.abstract,
                     publication_year: paper.publication_year,
-                    journal: paper.primary_location?.source?.display_name || paper.host_venue?.display_name,
-                    external_id: paper.id
+                    journal: paper.journal?.display_name || paper.venue
                   }} 
                 />
                 
@@ -293,14 +279,14 @@ const PaperDetails = () => {
                   Summarize this Paper
                 </Button>
 
-                {paper.best_oa_location?.pdf_url && (
+                {paper.open_access?.is_oa && (
                   <Button 
                     variant="outline" 
                     className="w-full"
                     asChild
                   >
                     <a 
-                      href={paper.best_oa_location.pdf_url} 
+                      href={paper.best_oa_location?.pdf_url} 
                       target="_blank" 
                       rel="noopener noreferrer"
                     >
@@ -310,14 +296,14 @@ const PaperDetails = () => {
                   </Button>
                 )}
 
-                {paper.open_access?.oa_url && (
+                {paper.url && (
                   <Button 
                     variant="outline" 
                     className="w-full"
                     asChild
                   >
                     <a 
-                      href={paper.open_access.oa_url} 
+                      href={paper.url} 
                       target="_blank" 
                       rel="noopener noreferrer"
                     >
@@ -352,7 +338,7 @@ const PaperDetails = () => {
 
                 {paper.concepts && paper.concepts.length > 0 && (
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Key Concepts:</span>
+                    <span className="text-gray-600">Key Topics:</span>
                     <span className="font-medium">{paper.concepts.length}</span>
                   </div>
                 )}

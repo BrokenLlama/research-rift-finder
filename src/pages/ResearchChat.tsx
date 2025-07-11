@@ -8,10 +8,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Send, Bot, User } from 'lucide-react';
+import { Send, Bot, User, MessageCircle, BookOpen } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import ChatHistorySidebar from '@/components/ChatHistorySidebar';
 import { useChatHistory } from '@/hooks/useChatHistory';
+import { useNavigate } from 'react-router-dom';
 
 interface Message {
   id: string;
@@ -30,10 +31,18 @@ interface Paper {
   summary: any;
 }
 
+interface PaperList {
+  id: string;
+  name: string;
+  description: string | null;
+  paper_count: number;
+}
+
 const ResearchChat = () => {
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   
   const listId = searchParams.get('listId');
   const listName = searchParams.get('listName');
@@ -42,15 +51,81 @@ const ResearchChat = () => {
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [papers, setPapers] = useState<Paper[]>([]);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [userLists, setUserLists] = useState<PaperList[]>([]);
+  const [loadingLists, setLoadingLists] = useState(false);
   
-  const { currentChat, createNewChat, updateChatMessages } = useChatHistory(listId || undefined);
+  const { currentChat, createNewChat, updateChatMessages, loading: chatHistoryLoading } = useChatHistory(listId || undefined);
 
   useEffect(() => {
-    if (user && listId) {
-      initializeChat();
+    if (user) {
+      if (listId) {
+        initializeChat();
+      } else {
+        fetchUserLists();
+      }
     }
   }, [user, listId]);
+
+  // Load messages when currentChat changes
+  useEffect(() => {
+    if (currentChat) {
+      const convertedMessages: Message[] = currentChat.messages.map((msg, index) => ({
+        id: `chat-${currentChat.id}-${index}`,
+        role: msg.role,
+        content: msg.content,
+        created_at: new Date().toISOString(),
+      }));
+      setMessages(convertedMessages);
+    } else {
+      setMessages([]);
+    }
+  }, [currentChat]);
+
+  const fetchUserLists = async () => {
+    if (!user) return;
+    
+    setLoadingLists(true);
+    try {
+      // Get all lists with paper counts
+      const { data: listsData, error: listsError } = await supabase
+        .from('paper_lists')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (listsError) {
+        toast({
+          title: "Error",
+          description: "Failed to fetch your lists.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Get paper counts for each list
+      const listsWithCount = await Promise.all(
+        listsData.map(async (list) => {
+          const { count, error: countError } = await supabase
+            .from('papers')
+            .select('*', { count: 'exact', head: true })
+            .eq('list_id', list.id);
+
+          if (countError) {
+            console.error('Error getting count for list:', list.id, countError);
+            return { ...list, paper_count: 0 };
+          }
+
+          return { ...list, paper_count: count || 0 };
+        })
+      );
+
+      setUserLists(listsWithCount);
+    } catch (error) {
+      console.error('Error fetching lists:', error);
+    } finally {
+      setLoadingLists(false);
+    }
+  };
 
   const initializeChat = async () => {
     try {
@@ -81,63 +156,6 @@ const ResearchChat = () => {
       }));
       setPapers(typedPapers);
 
-      // Create or get existing chat session
-      const { data: existingSession, error: sessionError } = await supabase
-        .from('chat_sessions')
-        .select('id')
-        .eq('user_id', user?.id)
-        .eq('list_id', listId)
-        .single();
-
-      let currentSessionId;
-
-      if (existingSession) {
-        currentSessionId = existingSession.id;
-      } else {
-        const { data: newSession, error: createError } = await supabase
-          .from('chat_sessions')
-          .insert({
-            user_id: user?.id,
-            list_id: listId,
-            name: `Chat with ${listName || 'Papers'}`,
-          })
-          .select('id')
-          .single();
-
-        if (createError) {
-          toast({
-            title: "Error",
-            description: "Failed to create chat session.",
-            variant: "destructive",
-          });
-          return;
-        }
-
-        currentSessionId = newSession.id;
-      }
-
-      setSessionId(currentSessionId);
-
-      // Load existing messages
-      const { data: messagesData, error: messagesError } = await supabase
-        .from('chat_messages')
-        .select('*')
-        .eq('session_id', currentSessionId)
-        .order('created_at', { ascending: true });
-
-      if (messagesError) {
-        console.error('Error loading messages:', messagesError);
-      } else {
-        // Cast the messages data to match our interface
-        const typedMessages: Message[] = (messagesData || []).map(msg => ({
-          id: msg.id,
-          role: (msg.role === 'user' || msg.role === 'assistant') ? msg.role : 'user',
-          content: msg.content,
-          created_at: msg.created_at || new Date().toISOString(),
-        }));
-        setMessages(typedMessages);
-      }
-
     } catch (error) {
       console.error('Error initializing chat:', error);
     }
@@ -145,37 +163,32 @@ const ResearchChat = () => {
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !sessionId || isLoading) return;
+    if (!newMessage.trim() || isLoading) return;
 
     const userMessage = newMessage.trim();
     setNewMessage('');
     setIsLoading(true);
 
     try {
-      // Save user message
-      const { data: savedMessage, error: saveError } = await supabase
-        .from('chat_messages')
-        .insert({
-          session_id: sessionId,
-          role: 'user',
-          content: userMessage,
-        })
-        .select()
-        .single();
-
-      if (saveError) {
-        throw saveError;
+      // Ensure we have a current chat
+      let chatToUse = currentChat;
+      if (!chatToUse && listId) {
+        chatToUse = await createNewChat(listId, `Chat with ${listName || 'Papers'}`);
       }
 
-      const typedUserMessage: Message = {
-        id: savedMessage.id,
-        role: 'user',
-        content: savedMessage.content,
-        created_at: savedMessage.created_at || new Date().toISOString(),
-      };
+      if (!chatToUse) {
+        throw new Error('Failed to create or get chat session');
+      }
 
       // Add user message to UI immediately
-      const updatedMessages = [...messages, typedUserMessage];
+      const userMessageObj: Message = {
+        id: `user-${Date.now()}`,
+        role: 'user',
+        content: userMessage,
+        created_at: new Date().toISOString(),
+      };
+
+      const updatedMessages = [...messages, userMessageObj];
       setMessages(updatedMessages);
 
       // Prepare messages for API
@@ -184,7 +197,7 @@ const ResearchChat = () => {
         content: msg.content
       }));
 
-      // Call our Groq edge function instead of OpenRouter
+      // Call our Groq edge function
       const response = await supabase.functions.invoke('groq-chat', {
         body: {
           messages: chatMessages,
@@ -198,40 +211,23 @@ const ResearchChat = () => {
 
       const { message: assistantResponse } = response.data;
 
-      // Save assistant message
-      const { data: assistantMessage, error: assistantError } = await supabase
-        .from('chat_messages')
-        .insert({
-          session_id: sessionId,
-          role: 'assistant',
-          content: assistantResponse,
-        })
-        .select()
-        .single();
-
-      if (assistantError) {
-        throw assistantError;
-      }
-
-      const typedAssistantMessage: Message = {
-        id: assistantMessage.id,
+      // Add assistant message to UI
+      const assistantMessageObj: Message = {
+        id: `assistant-${Date.now()}`,
         role: 'assistant',
-        content: assistantMessage.content,
-        created_at: assistantMessage.created_at || new Date().toISOString(),
+        content: assistantResponse,
+        created_at: new Date().toISOString(),
       };
 
-      // Add assistant message to UI
-      const finalMessages = [...updatedMessages, typedAssistantMessage];
+      const finalMessages = [...updatedMessages, assistantMessageObj];
       setMessages(finalMessages);
 
-      // Update chat history
-      if (currentChat) {
-        const historyMessages = finalMessages.map(msg => ({
-          role: msg.role,
-          content: msg.content
-        }));
-        await updateChatMessages(currentChat.id, historyMessages);
-      }
+      // Update chat history in database
+      const historyMessages = finalMessages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+      await updateChatMessages(chatToUse.id, historyMessages);
 
     } catch (error) {
       console.error('Error sending message:', error);
@@ -255,9 +251,18 @@ const ResearchChat = () => {
     setMessages(convertedMessages);
   };
 
-  const handleNewChat = () => {
-    setMessages([]);
-    setNewMessage('');
+  const handleNewChat = async () => {
+    if (listId) {
+      const newChat = await createNewChat(listId, `Chat with ${listName || 'Papers'}`);
+      if (newChat) {
+        setMessages([]);
+        setNewMessage('');
+      }
+    }
+  };
+
+  const startChatWithList = (list: PaperList) => {
+    navigate(`/research-chat?listId=${list.id}&listName=${encodeURIComponent(list.name)}`);
   };
 
   if (!user) {
@@ -276,19 +281,60 @@ const ResearchChat = () => {
       <div className="min-h-screen bg-gray-50">
         <Navigation />
         <div className="container mx-auto px-4 py-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>Research Chat</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-gray-600 mb-4">
-                Select a paper list to start chatting with your research papers.
-              </p>
-              <p className="text-sm text-gray-500">
-                Go to "My Lists" and click "Chat" on any list to start a conversation.
-              </p>
-            </CardContent>
-          </Card>
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 mb-4">Research Chat</h1>
+            <p className="text-xl text-gray-600">
+              Choose a paper list to start chatting with your research papers
+            </p>
+          </div>
+
+          {loadingLists ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p>Loading your lists...</p>
+            </div>
+          ) : userLists.length === 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>No Lists Available</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 mb-4">
+                  You don't have any paper lists yet. Create a list first to start chatting.
+                </p>
+                <Button onClick={() => navigate('/my-lists')}>
+                  Go to My Lists
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {userLists.map((list) => (
+                <Card key={list.id} className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => startChatWithList(list)}>
+                  <CardHeader>
+                    <CardTitle className="flex items-center text-lg">
+                      <BookOpen className="h-5 w-5 mr-2 text-blue-600" />
+                      {list.name}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {list.description && (
+                      <p className="text-sm text-gray-600 mb-4">{list.description}</p>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-500">
+                        {list.paper_count} papers
+                      </span>
+                      <Button size="sm" className="flex items-center">
+                        <MessageCircle className="h-4 w-4 mr-2" />
+                        Start Chat
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -322,13 +368,20 @@ const ResearchChat = () => {
               <CardContent className="flex-1 flex flex-col">
                 <ScrollArea className="flex-1 pr-4 mb-4">
                   <div className="space-y-4">
-                    {messages.length === 0 && (
+                    {messages.length === 0 && !chatHistoryLoading && (
                       <div className="text-center text-gray-500 py-8">
                         <Bot className="h-12 w-12 mx-auto mb-4 text-gray-400" />
                         <p>Ask me anything about your selected papers!</p>
                         <p className="text-sm mt-2">
                           I can help analyze, summarize, and answer questions based on the {papers.length} papers in this list.
                         </p>
+                      </div>
+                    )}
+                    
+                    {chatHistoryLoading && (
+                      <div className="text-center text-gray-500 py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                        <p>Loading chat history...</p>
                       </div>
                     )}
                     
@@ -379,10 +432,10 @@ const ResearchChat = () => {
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                     placeholder="Ask a question about your papers..."
-                    disabled={isLoading}
+                    disabled={isLoading || chatHistoryLoading}
                     className="flex-1"
                   />
-                  <Button type="submit" disabled={isLoading || !newMessage.trim()}>
+                  <Button type="submit" disabled={isLoading || !newMessage.trim() || chatHistoryLoading}>
                     <Send className="h-4 w-4" />
                   </Button>
                 </form>

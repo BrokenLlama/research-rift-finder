@@ -12,6 +12,7 @@ import ListDetails from "./pages/ListDetails";
 import PaperDetails from "./pages/PaperDetails";
 import AuthForm from "./components/AuthForm";
 import NotFound from "./pages/NotFound";
+import UploadPaper from "./pages/UploadPaper";
 
 const queryClient = new QueryClient();
 
@@ -27,6 +28,7 @@ const App = () => (
           <Route path="/summarize" element={<Summarize />} />
           <Route path="/research-chat" element={<ResearchChat />} />
           <Route path="/my-lists" element={<MyLists />} />
+          <Route path="/upload" element={<UploadPaper />} />
           <Route path="/list/:listId" element={<ListDetails />} />
           <Route path="/paper/:source/:paperId" element={<PaperDetails />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
